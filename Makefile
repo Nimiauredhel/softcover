@@ -34,13 +34,17 @@ app: $(LIB_PATH)
 
 $(EXE_PATH): $(EXE_SRC_DIR)*.c
 	mkdir -p $(BUILD_DIR)
-	gcc -o $(EXE_PATH) $(EXE_SRC_DIR)*.c $(FLAGS) $(COMMON_INCLUDES) $(EXE_INCLUDES)
-	touch $(EXE_PATH)
+	rm -f compile_commands.json
+	bear -- gcc -o $(EXE_PATH) $(EXE_SRC_DIR)*.c $(FLAGS) $(COMMON_INCLUDES) $(EXE_INCLUDES)
+	mv compile_commands.json $(BUILD_DIR)platform_compile_commands.json
+	jq -s add $(BUILD_DIR)*.json > compile_commands.json
 
 $(LIB_PATH): $(LIB_SRC_DIR)*.c
 	mkdir -p $(BUILD_DIR)
-	gcc -shared -o $(LIB_PATH) -fPIC $(LIB_SRC_DIR)*.c $(FLAGS) $(COMMON_INCLUDES) $(LIB_INCLUDES) 
-	touch $(LIB_PATH)
+	rm -f compile_commands.json
+	bear -- gcc -shared -o $(LIB_PATH) -fPIC $(LIB_SRC_DIR)*.c $(FLAGS) $(COMMON_INCLUDES) $(LIB_INCLUDES) 
+	mv compile_commands.json $(BUILD_DIR)app_compile_commands.json
+	jq -s add $(BUILD_DIR)*.json > compile_commands.json
                                      
 .PHONY: strict
 strict:
