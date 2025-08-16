@@ -5,8 +5,13 @@
 #include <time.h>                                                                                                                                                                                                                         
 #include <sys/stat.h>                                                                                                                                                                                                                     
 
-static const char *lib_path = "./app.so";
+#ifndef LIB_NAME
+#define LIB_NAME ""
+#endif
+
 static const char *func_name = "dynamic_function";
+
+static char lib_path[256] = LIB_NAME;
 
 static time_t lib_load_time = {0};
 static time_t lib_modified_time = {0};
@@ -30,7 +35,7 @@ static void load_dynamic(void)
 
     if (lib_handle == NULL )
     {
-        printf("Failed to load .so file: %s\n", dlerror());
+        printf("Failed to load [%s]: %s\n", lib_path, dlerror());
         exit(EXIT_FAILURE);
     }
 
@@ -41,11 +46,21 @@ static void load_dynamic(void)
     lib_load_time = lib_stat.st_mtime;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     static struct stat file_stat = {0};
 
     printf("Program started.\n");
+
+    if (argc > 1)
+    {
+        snprintf(lib_path, sizeof(lib_path), "%s", argv[1]);
+        printf("Using given library path: %s.\n", lib_path);
+    }
+    else
+    {
+        printf("Using default library path: %s.\n", lib_path);
+    }
 
     load_dynamic();
 
