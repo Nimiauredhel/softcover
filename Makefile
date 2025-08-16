@@ -6,6 +6,7 @@ LIB_NAME=app$(LIB_SUFFIX)
 LIB_SRC_DIR=src/app/
 LIB_PATH=$(BUILD_DIR)$(LIB_NAME)
 
+COMMON_INCLUDES=-Isrc/common
 EXE_INCLUDES=
 LIB_INCLUDES=
 FLAGS_DEFAULT=-DLIB_NAME=\"./$(LIB_NAME)\"
@@ -33,12 +34,12 @@ app: $(LIB_PATH)
 
 $(EXE_PATH): $(EXE_SRC_DIR)*.c
 	mkdir -p $(BUILD_DIR)
-	gcc -o $(EXE_PATH) $(EXE_SRC_DIR)*.c $(FLAGS) $(EXE_INCLUDES)
+	gcc -o $(EXE_PATH) $(EXE_SRC_DIR)*.c $(FLAGS) $(COMMON_INCLUDES) $(EXE_INCLUDES)
 	touch $(EXE_PATH)
 
 $(LIB_PATH): $(LIB_SRC_DIR)*.c
 	mkdir -p $(BUILD_DIR)
-	gcc -shared -o $(LIB_PATH) -fPIC $(LIB_SRC_DIR)*.c $(FLAGS) $(LIB_INCLUDES) 
+	gcc -shared -o $(LIB_PATH) -fPIC $(LIB_SRC_DIR)*.c $(FLAGS) $(COMMON_INCLUDES) $(LIB_INCLUDES) 
 	touch $(LIB_PATH)
                                      
 .PHONY: strict

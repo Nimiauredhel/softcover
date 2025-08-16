@@ -5,7 +5,7 @@
 #include <time.h>                                                                                                                                                                                                                         
 #include <sys/stat.h>                                                                                                                                                                                                                     
 
-#include "../../common/softcover_platform.h"
+#include "softcover_platform.h"
 
 #ifndef LIB_NAME
 #define LIB_NAME ""

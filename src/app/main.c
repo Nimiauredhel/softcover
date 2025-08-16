@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include "../common/softcover_platform.h"
+#include "softcover_platform.h"
 
 void app_init(Platform_t *platform, uint8_t *state_mem, size_t state_mem_len)
 {
