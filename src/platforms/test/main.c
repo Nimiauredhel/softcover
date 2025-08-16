@@ -76,8 +76,11 @@ void gfx_draw_texture(int idx, int x, int y)
 
 char input_read(void)
 {
-    printf("input read.\n");
-    return 0;
+    printf("input read:\n");
+    char c = getchar();
+    char n = getchar();
+    fflush(stdin);
+    return c;
 }
 
 static void gfx_sync_buffer(void)
