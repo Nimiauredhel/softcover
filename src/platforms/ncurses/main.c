@@ -18,7 +18,7 @@
 #define MOCK_SPRITE_MAX_COUNT (32)
 
 #define WINDOW_HEIGHT (32)
-#define WINDOW_WIDTH (64)
+#define WINDOW_WIDTH (128)
 
 static const char *app_init_name = "app_init";
 static const char *app_loop_name = "app_loop";
@@ -31,8 +31,8 @@ static time_t lib_modified_time = {0};
 static void *lib_handle = NULL;
 static void (*func_handle)(void) = NULL;
 
-static void (*app_init)(Platform_t *platform, uint8_t *state_mem, size_t state_mem_len);
-static void (*app_loop)(Platform_t *platform, uint8_t *state_mem, size_t state_mem_len);
+static AppInitFunc app_init;
+static AppLoopFunc app_loop;
 
 typedef struct MockTexture
 {
@@ -81,7 +81,7 @@ void gfx_draw_texture(int idx, int x, int y)
     mock_sprite_count++;
 }
 
-char input_read(void)
+volatile char input_read(void)
 {
     //printf("input read:\n");
     char c = wgetch(main_window);
@@ -112,7 +112,9 @@ static void gfx_sync_buffer(void)
         mvwprintw(main_window,
                 (WINDOW_HEIGHT/2)+mock_sprite_buffer[i].y,
                 (WINDOW_WIDTH/2)+mock_sprite_buffer[i].x,
-                "%s", mock_texture_storage[mock_sprite_buffer[i].texture_idx].name);
+                "%s [%d,%d]", mock_texture_storage[mock_sprite_buffer[i].texture_idx].name,
+                mock_sprite_buffer[i].y,
+                mock_sprite_buffer[i].x);
     }
 
     wrefresh(main_window);
@@ -175,11 +177,11 @@ int main(int argc, char **argv)
         .input_read = input_read,
     };
 
-    uint8_t app_state_mem[4096] = {0};
+    Memory_t *app_state_mem = malloc(4096 + sizeof(Memory_t));
 
     if (app_init != NULL)
     {
-        app_init(&platform, app_state_mem, sizeof(app_state_mem));
+        app_init(&platform, app_state_mem);
     }
     else
     {
@@ -189,7 +191,7 @@ int main(int argc, char **argv)
     {
         if (app_loop != NULL)
         {
-            app_loop(&platform, app_state_mem, sizeof(app_state_mem));
+            app_loop(&platform, app_state_mem);
         }
         else
         {

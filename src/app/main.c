@@ -10,48 +10,63 @@ typedef struct Thing
     int8_t y;
 } Thing_t;
 
-void app_init(Platform_t *platform, uint8_t *state_mem, size_t state_mem_len)
+typedef struct AppState
 {
-    Thing_t *player_thing = ((Thing_t *)state_mem+0);
-    Thing_t *other_thing = ((Thing_t *)state_mem+3);
+    Thing_t first_thing;
+    Thing_t second_thing;
+    Thing_t *controlled_thing;
+} AppState_t;
 
-    player_thing->texture_id = platform->gfx_load_texture("player thing");
-    player_thing->x = 0;
-    player_thing->y = 0;
+/// must match prototype @ref AppInitFunc
+void app_init(Platform_t *platform, Memory_t *memory)
+{
+    AppState_t *state = (AppState_t *)memory->buffer;
 
-    other_thing->texture_id = platform->gfx_load_texture("other thing");
-    other_thing->x = 5;
-    other_thing->y = 5;
+    state->first_thing.texture_id = platform->gfx_load_texture("first thing");
+    state->first_thing.x = 0;
+    state->first_thing.y = 0;
+
+    state->second_thing.texture_id = platform->gfx_load_texture("second thing");
+    state->second_thing.x = 5;
+    state->second_thing.y = 5;
+
+    state->controlled_thing = &state->first_thing;
 }
 
-void app_loop(Platform_t *platform, uint8_t *state_mem, size_t state_mem_len)
+/// must match prototype @ref AppLoopFunc
+void app_loop(Platform_t *platform, Memory_t *memory)
 {
-    static const int8_t mov_speed = 5;
+    static const int8_t mov_speed = 1;
 
-    Thing_t *player_thing = ((Thing_t *)state_mem+0);
-    Thing_t *other_thing = ((Thing_t *)state_mem+3);
+    AppState_t *state = (AppState_t *)memory->buffer;
 
     char input = platform->input_read();
 
     switch (input)
     {
         case 'w':
-            player_thing->y -= mov_speed;
+            state->controlled_thing->y -= mov_speed;
             break;
         case 'a':
-            player_thing->x -= mov_speed;
+            state->controlled_thing->x -= mov_speed;
             break;
         case 's':
-            player_thing->y += mov_speed;
+            state->controlled_thing->y += mov_speed;
             break;
         case 'd':
-            player_thing->x += mov_speed;
+            state->controlled_thing->x += mov_speed;
+            break;
+        case 'q':
+            state->controlled_thing =
+                state->controlled_thing == &state->first_thing
+                ? &state->second_thing
+                : &state->first_thing;
             break;
         default:
             break;
     }
 
     platform->gfx_clear_buffer();
-    platform->gfx_draw_texture(player_thing->texture_id, player_thing->x, player_thing->y);
-    platform->gfx_draw_texture(other_thing->texture_id, other_thing->x, other_thing->y);
+    platform->gfx_draw_texture(state->first_thing.texture_id, state->first_thing.x, state->first_thing.y);
+    platform->gfx_draw_texture(state->second_thing.texture_id, state->second_thing.x, state->second_thing.y);
 }

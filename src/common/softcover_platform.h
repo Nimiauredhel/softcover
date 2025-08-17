@@ -5,6 +5,10 @@
 #include <stdint.h>
 
 typedef struct Platform Platform_t;
+typedef struct Memory Memory_t;
+
+typedef void (*AppInitFunc)(Platform_t *platform, Memory_t *memory);
+typedef void (*AppLoopFunc)(Platform_t *platform, Memory_t *memory);
 
 struct Platform
 {
@@ -15,6 +19,12 @@ struct Platform
     // input
     volatile char (*input_read)(void);
 
+};
+
+struct Memory
+{
+    size_t size;
+    uint8_t buffer[];
 };
 
 #endif
