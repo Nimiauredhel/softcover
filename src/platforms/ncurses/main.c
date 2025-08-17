@@ -57,6 +57,8 @@ static WINDOW *main_window = NULL;
 Memory_t* memory_allocate(size_t size)
 {
     Memory_t *memory = (Memory_t *)malloc(size + sizeof(Memory_t));
+    explicit_bzero(memory->buffer, size);
+    memory->size = size;
     return memory;
 }
 

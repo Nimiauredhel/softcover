@@ -21,6 +21,10 @@ struct Platform
     void (*gfx_draw_texture)(int idx, int x, int y);
     // input
     volatile char (*input_read)(void);
+    // audio
+    // TODO: define audio interface
+    // storage
+    // TODO: define storage interface
 
 };
 
