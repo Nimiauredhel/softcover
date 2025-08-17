@@ -12,8 +12,6 @@ typedef struct Thing
 
 void app_init(Platform_t *platform, uint8_t *state_mem, size_t state_mem_len)
 {
-    printf("app init.\n");
-
     Thing_t *player_thing = ((Thing_t *)state_mem+0);
     Thing_t *other_thing = ((Thing_t *)state_mem+3);
 
@@ -28,7 +26,7 @@ void app_init(Platform_t *platform, uint8_t *state_mem, size_t state_mem_len)
 
 void app_loop(Platform_t *platform, uint8_t *state_mem, size_t state_mem_len)
 {
-    printf("app loop.\n");
+    static const int8_t mov_speed = 5;
 
     Thing_t *player_thing = ((Thing_t *)state_mem+0);
     Thing_t *other_thing = ((Thing_t *)state_mem+3);
@@ -38,16 +36,16 @@ void app_loop(Platform_t *platform, uint8_t *state_mem, size_t state_mem_len)
     switch (input)
     {
         case 'w':
-            player_thing->y--;
+            player_thing->y -= mov_speed;
             break;
         case 'a':
-            player_thing->x--;
+            player_thing->x -= mov_speed;
             break;
         case 's':
-            player_thing->y++;
+            player_thing->y += mov_speed;
             break;
         case 'd':
-            player_thing->x++;
+            player_thing->x += mov_speed;
             break;
         default:
             break;

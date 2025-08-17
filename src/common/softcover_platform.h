@@ -13,7 +13,7 @@ struct Platform
     int (*gfx_load_texture)(char *name);
     void (*gfx_draw_texture)(int idx, int x, int y);
     // input
-    char (*input_read)(void);
+    volatile char (*input_read)(void);
 
 };
 
