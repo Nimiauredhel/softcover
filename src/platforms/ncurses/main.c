@@ -54,6 +54,17 @@ static MockSprite_t mock_sprite_buffer[MOCK_SPRITE_MAX_COUNT] = {0};
 
 static WINDOW *main_window = NULL;
 
+Memory_t* memory_allocate(size_t size)
+{
+    Memory_t *memory = (Memory_t *)malloc(size + sizeof(Memory_t));
+    return memory;
+}
+
+void memory_release(Memory_t *memory)
+{
+    free(memory);
+}
+
 void gfx_clear_buffer(void)
 {
     mock_sprite_count = 0;
@@ -171,17 +182,19 @@ int main(int argc, char **argv)
 
     Platform_t platform =
     {
+        .memory_allocate = memory_allocate,
+        .memory_release = memory_release,
         .gfx_clear_buffer = gfx_clear_buffer,
         .gfx_draw_texture = gfx_draw_texture,
         .gfx_load_texture = gfx_load_texture,
         .input_read = input_read,
     };
 
-    Memory_t *app_state_mem = malloc(4096 + sizeof(Memory_t));
+    Memory_t *app_state_mem = NULL;
 
     if (app_init != NULL)
     {
-        app_init(&platform, app_state_mem);
+        app_init(&platform, &app_state_mem);
     }
     else
     {

@@ -18,8 +18,11 @@ typedef struct AppState
 } AppState_t;
 
 /// must match prototype @ref AppInitFunc
-void app_init(Platform_t *platform, Memory_t *memory)
+void app_init(Platform_t *platform, Memory_t **memory_pptr)
 {
+    Memory_t *memory = platform->memory_allocate(4096);
+    *memory_pptr = memory;
+
     AppState_t *state = (AppState_t *)memory->buffer;
 
     state->first_thing.texture_id = platform->gfx_load_texture("first thing");
