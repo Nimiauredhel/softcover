@@ -222,6 +222,7 @@ int main(int argc, char **argv)
 
     app_exit(&platform, app_main_memory);
     memory_release(&app_main_memory);
+    audio_deinit();
 
     return EXIT_SUCCESS;
 }

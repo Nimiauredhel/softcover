@@ -25,7 +25,8 @@ volatile char input_read(void);
 void gfx_clear_buffer(void);
 int gfx_load_texture(char *name);
 void gfx_draw_texture(int idx, int x, int y);
-void gfx_init(void);
 void gfx_sync_buffer(void);
+void gfx_init(void);
+void gfx_deinit(void);
 
 #endif

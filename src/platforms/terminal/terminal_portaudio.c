@@ -2,6 +2,8 @@
 
 #include <stdlib.h>
 
+#include "portaudio.h"
+
 static PaStream *audio_stream;
 static AudioBuffer_t audio_user_buffer = {0};
 
@@ -104,11 +106,15 @@ void audio_init(void)
     set_audio(audio_stream, true);
 }
 
-void deinit_audio(PaStream *stream)
+void audio_deinit(void)
 {
     PaError err;
 
-    err = Pa_CloseStream(stream);
+    if (audio_stream != NULL)
+    {
+        err = Pa_CloseStream(audio_stream);
+    }
+
     err = Pa_Terminate();
 
     // TODO: handle PA errors ..

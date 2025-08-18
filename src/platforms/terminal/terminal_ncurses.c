@@ -44,21 +44,6 @@ void gfx_draw_texture(int idx, int x, int y)
     mock_sprite_count++;
 }
 
-void gfx_init(void)
-{
-    initscr();
-
-    noecho();
-    cbreak();
-
-    main_window = newwin(WINDOW_HEIGHT, WINDOW_WIDTH, 0, 0);
-
-    nodelay(main_window, true);
-
-    werase(main_window);
-    wrefresh(main_window);
-}
-
 void gfx_sync_buffer(void)
 {
     werase(main_window);
@@ -74,4 +59,30 @@ void gfx_sync_buffer(void)
     }
 
     wrefresh(main_window);
+}
+
+void gfx_init(void)
+{
+    initscr();
+
+    noecho();
+    cbreak();
+
+    main_window = newwin(WINDOW_HEIGHT, WINDOW_WIDTH, 0, 0);
+
+    nodelay(main_window, true);
+
+    werase(main_window);
+    wrefresh(main_window);
+}
+
+void gfx_deinit(void)
+{
+    if (main_window != NULL)
+    {
+        werase(main_window);
+        delwin(main_window);
+    }
+
+    endwin();
 }
