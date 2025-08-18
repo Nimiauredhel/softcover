@@ -6,6 +6,7 @@
 #include <time.h>                                                                                                                                                                                                                         
 #include <sys/stat.h>                                                                                                                                                                                                                     
 
+#include "terminal_utils.h"
 #include "terminal_ncurses.h"
 #include "terminal_portaudio.h"
 
@@ -16,9 +17,11 @@
 #endif
 
 Memory_t* memory_allocate(size_t size);
-void memory_release(Memory_t *memory);
+void memory_release(Memory_t **memory_pptr);
 void storage_save_state(char *state_name);
 void storage_load_state(char *state_name);
+bool get_should_terminate(void);
+void set_should_terminate(bool value);
 
 static const Platform_t platform =
 {
@@ -31,10 +34,13 @@ static const Platform_t platform =
     .audio_play_chunk = audio_play_chunk,
     .storage_save_state = storage_save_state,
     .storage_load_state = storage_load_state,
+    .get_should_terminate = get_should_terminate,
+    .set_should_terminate = set_should_terminate,
 };
 
 static const char *app_init_name = "app_init";
 static const char *app_loop_name = "app_loop";
+static const char *app_exit_name = "app_exit";
 
 static const char *state_filename_format = "%.state";
 
@@ -48,6 +54,7 @@ static void (*func_handle)(void) = NULL;
 
 static AppInitFunc app_init;
 static AppLoopFunc app_loop;
+static AppExitFunc app_exit;
 
 static Memory_t *app_main_memory = NULL;
 
@@ -59,9 +66,13 @@ Memory_t* memory_allocate(size_t size)
     return memory;
 }
 
-void memory_release(Memory_t *memory)
+void memory_release(Memory_t **memory_pptr)
 {
-    free(memory);
+    if (*memory_pptr != NULL)
+    {
+        free(*memory_pptr);
+        *memory_pptr = NULL;
+    }
 }
 
 void storage_save_state(char *state_name)
@@ -77,6 +88,7 @@ void storage_save_state(char *state_name)
     {
         perror("Failed to create file");
         //exit(EXIT_FAILURE);
+        return;
     }
     
     fwrite(app_main_memory->buffer, 1, app_main_memory->size, file);
@@ -97,6 +109,7 @@ void storage_load_state(char *state_name)
     {
         perror("Failed to open file");
         //exit(EXIT_FAILURE);
+        return;
     }
 
     fseek(file, 0, SEEK_END);
@@ -104,7 +117,7 @@ void storage_load_state(char *state_name)
 
     if (file_size != app_main_memory->size)
     {
-        memory_release(app_main_memory);
+        memory_release(&app_main_memory);
         app_main_memory = memory_allocate(file_size);
     }
 
@@ -112,6 +125,16 @@ void storage_load_state(char *state_name)
     
     fread(app_main_memory->buffer, 1, file_size, file);
     fclose(file);
+}
+
+bool get_should_terminate(void)
+{
+    return should_terminate;
+}
+
+void set_should_terminate(bool value)
+{
+    should_terminate = value;
 }
 
 static void load_app(void)
@@ -136,6 +159,7 @@ static void load_app(void)
 
     app_init = dlsym(lib_handle, app_init_name);
     app_loop = dlsym(lib_handle, app_loop_name);
+    app_exit = dlsym(lib_handle, app_exit_name);
 
     struct stat lib_stat = {0};
     stat(lib_path, &lib_stat);
@@ -147,6 +171,8 @@ int main(int argc, char **argv)
     static struct stat file_stat = {0};
 
     printf("Program started.\n");
+
+    initialize_signal_handler();
 
     if (argc > 1)
     {
@@ -170,7 +196,7 @@ int main(int argc, char **argv)
     {
     }
 
-    for(;;)
+    while(!should_terminate)
     {
         if (app_loop != NULL)
         {
@@ -193,6 +219,9 @@ int main(int argc, char **argv)
 
         usleep(16000);
     }
+
+    app_exit(&platform, app_main_memory);
+    memory_release(&app_main_memory);
 
     return EXIT_SUCCESS;
 }

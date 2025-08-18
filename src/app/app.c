@@ -92,3 +92,8 @@ void app_loop(const Platform_t *platform, Memory_t *memory)
     platform->gfx_draw_texture(app_memory->things[0].texture_id, app_memory->things[0].x, app_memory->things[0].y);
     platform->gfx_draw_texture(app_memory->things[1].texture_id, app_memory->things[1].x, app_memory->things[1].y);
 }
+
+/// must match prototype @ref AppExitFunc
+void app_exit(const Platform_t *platform, Memory_t *memory)
+{
+}
