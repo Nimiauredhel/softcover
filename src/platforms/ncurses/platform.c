@@ -124,51 +124,6 @@ volatile char input_read(void)
     return c;
 }
 
-static void feed_audio_stream(void)
-{
-    static const uint16_t max_frames_per_feed = 1024;
-
-    if (audio_buffer->head != audio_buffer->tail)
-    {
-        uint16_t head_portion = 0;
-        uint16_t tail_portion = 0;
-
-        if (audio_buffer->tail > audio_buffer->head)
-        {
-            head_portion = audio_buffer->tail - audio_buffer->head;
-            tail_portion = 0;
-        }
-        else
-        {
-            head_portion = audio_buffer->size - audio_buffer->head;
-            tail_portion = audio_buffer->tail;
-        }
-
-        if (head_portion >= max_frames_per_feed)
-        {
-            head_portion = max_frames_per_feed;
-            tail_portion = 0;
-        }
-        else if (head_portion + tail_portion > max_frames_per_feed)
-        {
-            tail_portion = max_frames_per_feed - head_portion;
-        }
-
-        write_audio(audio_stream,
-                    audio_buffer->buffer + audio_buffer->head,
-                    head_portion);
-        audio_buffer->head += head_portion;
-
-        if (tail_portion > 0)
-        {
-            write_audio(audio_stream,
-                        audio_buffer->buffer,
-                        tail_portion);
-            audio_buffer->head = tail_portion;
-        }
-    }
-}
-
 static void init_ncurses(void)
 {
     initscr();
@@ -290,7 +245,6 @@ int main(int argc, char **argv)
         }
 
         gfx_sync_buffer();
-        //feed_audio_stream();
 
         stat(lib_path, &file_stat);
         lib_modified_time = file_stat.st_mtime;
