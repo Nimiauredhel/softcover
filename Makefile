@@ -7,7 +7,7 @@ LIB_SRC_DIR=src/app/
 LIB_PATH=$(BUILD_DIR)$(LIB_NAME)
 
 COMMON_INCLUDES=-Isrc/common
-EXE_INCLUDES=-lncurses -lportaudio -lm
+EXE_INCLUDES=-lncurses -lportaudio
 LIB_INCLUDES=
 FLAGS_DEFAULT= -std=c99
 FLAGS_STRICT= -Wall -pedantic -Wextra
@@ -18,7 +18,7 @@ RUN_CMD=$(EXE_PATH) $(LIB_PATH) $(ARGS)
 
 EXE_SUFFIX=.o
 LIB_SUFFIX=.so
-PLATFORM_NAME=ncurses
+PLATFORM_NAME=terminal
 FLAGS=$(FLAGS_DEFAULT)
 ARGS=
 

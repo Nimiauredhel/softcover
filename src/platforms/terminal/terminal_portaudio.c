@@ -1,12 +1,12 @@
-#include "audio.h"
-#include <stdlib.h>
-#include <stdio.h>
+#include "terminal_portaudio.h"
 
-static int paStreamCallback( const void *inputBuffer, void *outputBuffer,
-                           unsigned long framesPerBuffer,
-                           const PaStreamCallbackTimeInfo* timeInfo,
-                           PaStreamCallbackFlags statusFlags,
-                           void *userData )
+#include <stdlib.h>
+
+static PaStream *audio_stream;
+static AudioBuffer_t audio_user_buffer = {0};
+
+static int paStreamCallback(const void *inputBuffer, void *outputBuffer, unsigned long framesPerBuffer,
+                           const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void *userData)
 {
     /* Prevent unused variable warning. */
     (void) inputBuffer;
@@ -26,48 +26,13 @@ static int paStreamCallback( const void *inputBuffer, void *outputBuffer,
 
         out[i] = data->buffer[data->head];
         data->head++;
-        if (data->head >= data->size) data->head = 0;
+        if (data->head >= data->length) data->head = 0;
     }
 
     return 0;
 }
 
-PaStream* init_audio(AudioBuffer_t *user_buffer)
-{
-    PaStream *new_stream;
-    PaError err;
-
-    err = Pa_Initialize();
-
-    if(err != paNoError)
-    {
-        // TODO: handle error
-    }
-
-    PaStreamParameters output_parameters = {0};
-    output_parameters.device = Pa_GetDefaultOutputDevice(); /* default input device */
-    output_parameters.channelCount = 2;
-    output_parameters.sampleFormat = paFloat32;
-    output_parameters.suggestedLatency = Pa_GetDeviceInfo(output_parameters.device)->defaultLowOutputLatency;
-    output_parameters.hostApiSpecificStreamInfo = NULL;
-
-    err = Pa_OpenStream(&new_stream,
-                               NULL,
-                               &output_parameters,
-                               44100.0,
-                               paFramesPerBufferUnspecified,        
-                               paNoFlag,
-                               paStreamCallback,
-                               user_buffer);
-    if(err != paNoError)
-    {
-        // TODO: handle error
-    }
-
-    return new_stream;
-}
-
-void set_audio(PaStream *stream, bool active)
+static void set_audio(PaStream *stream, bool active)
 {
     PaError err = paNoError;
     bool was_active = Pa_IsStreamActive(stream);
@@ -84,26 +49,67 @@ void set_audio(PaStream *stream, bool active)
     }
 }
 
-void write_audio(PaStream *stream, const float *input, const uint16_t len)
+void audio_play_chunk(float *chunk, uint16_t len)
 {
-    PaError err = paNoError;
+    for (int i = 0; i < len; i++)
+    {
+        audio_user_buffer.buffer[audio_user_buffer.tail] = chunk[i];
 
-    Pa_WriteStream(stream, input, len);
+        audio_user_buffer.tail += 1;
+
+        if (audio_user_buffer.tail >= audio_user_buffer.length) audio_user_buffer.tail = 0;
+
+        if (audio_user_buffer.tail == audio_user_buffer.head)
+        {
+            break;
+        }
+    }
+}
+
+void audio_init(void)
+{
+    PaError err;
+
+    err = Pa_Initialize();
 
     if(err != paNoError)
     {
         // TODO: handle error
     }
+
+    audio_user_buffer.head = 0;
+    audio_user_buffer.tail = 0;
+    audio_user_buffer.length = AUDIO_USER_BUFFER_LENGTH;
+
+    PaStreamParameters output_parameters = {0};
+    output_parameters.device = Pa_GetDefaultOutputDevice(); /* default input device */
+    output_parameters.channelCount = 2;
+    output_parameters.sampleFormat = paFloat32;
+    output_parameters.suggestedLatency = Pa_GetDeviceInfo(output_parameters.device)->defaultLowOutputLatency;
+    output_parameters.hostApiSpecificStreamInfo = NULL;
+
+    err = Pa_OpenStream(&audio_stream,
+                               NULL,
+                               &output_parameters,
+                               44100.0,
+                               paFramesPerBufferUnspecified,        
+                               paNoFlag,
+                               paStreamCallback,
+                               &audio_user_buffer);
+    if(err != paNoError)
+    {
+        // TODO: handle error
+    }
+
+    set_audio(audio_stream, true);
 }
 
 void deinit_audio(PaStream *stream)
 {
-    /*
     PaError err;
 
     err = Pa_CloseStream(stream);
     err = Pa_Terminate();
 
     // TODO: handle PA errors ..
-    */
 }

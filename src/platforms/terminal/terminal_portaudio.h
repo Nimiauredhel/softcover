@@ -5,17 +5,18 @@
 #include <stdbool.h>
 #include "portaudio.h"
 
+#define AUDIO_USER_BUFFER_LENGTH (4096)
+
 typedef struct AudioBuffer
 {
-    uint16_t size;
+    uint16_t length;
     uint16_t head;
     uint16_t tail;
-    float buffer[];
+    float buffer[AUDIO_USER_BUFFER_LENGTH];
 } AudioBuffer_t;
 
-PaStream* init_audio(AudioBuffer_t *user_buffer);
-void set_audio(PaStream *stream, bool active);
-void write_audio(PaStream *stream, const float *input, const uint16_t len);
+void audio_play_chunk(float *chunk, uint16_t len);
+void audio_init(void);
 void deinit_audio(PaStream *stream);
 
 #endif

@@ -1,4 +1,3 @@
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,20 +6,14 @@
 #include <time.h>                                                                                                                                                                                                                         
 #include <sys/stat.h>                                                                                                                                                                                                                     
 
-#include <ncurses.h>
-#include "audio.h"
+#include "terminal_ncurses.h"
+#include "terminal_portaudio.h"
 
 #include "softcover_platform.h"
 
 #ifndef LIB_NAME
 #define LIB_NAME ""
 #endif
-
-#define MOCK_TEXTURE_MAX_COUNT (32)
-#define MOCK_SPRITE_MAX_COUNT (32)
-
-#define WINDOW_HEIGHT (32)
-#define WINDOW_WIDTH (128)
 
 static const char *app_init_name = "app_init";
 static const char *app_loop_name = "app_loop";
@@ -36,30 +29,6 @@ static void (*func_handle)(void) = NULL;
 static AppInitFunc app_init;
 static AppLoopFunc app_loop;
 
-static PaStream *audio_stream;
-
-typedef struct MockTexture
-{
-    char name[32];
-} MockTexture_t;
-
-typedef struct MockSprite
-{
-    int texture_idx;
-    int x;
-    int y;
-} MockSprite_t;
-
-static uint8_t mock_texture_count = 0;
-static uint8_t mock_sprite_count = 0;
-
-static MockTexture_t mock_texture_storage[MOCK_TEXTURE_MAX_COUNT] = {0};
-static MockSprite_t mock_sprite_buffer[MOCK_SPRITE_MAX_COUNT] = {0};
-
-static WINDOW *main_window = NULL;
-
-static AudioBuffer_t *audio_buffer = NULL;
-
 Memory_t* memory_allocate(size_t size)
 {
     Memory_t *memory = (Memory_t *)malloc(size + sizeof(Memory_t));
@@ -71,89 +40,6 @@ Memory_t* memory_allocate(size_t size)
 void memory_release(Memory_t *memory)
 {
     free(memory);
-}
-
-void gfx_clear_buffer(void)
-{
-    mock_sprite_count = 0;
-    //printf("gfx clear buffer.\n");
-}
-
-int gfx_load_texture(char *name)
-{
-    if (mock_texture_count >= MOCK_TEXTURE_MAX_COUNT) return -1;
-
-    strncpy(mock_texture_storage[mock_texture_count].name, name, 32);
-    //printf("gfx load texture: %s.\n", name);
-    mock_texture_count++;
-    return mock_texture_count-1;
-}
-
-void gfx_draw_texture(int idx, int x, int y)
-{
-    if (mock_sprite_count >=MOCK_SPRITE_MAX_COUNT) return;
-
-    //printf("gfx draw texture: idx %d, x %d, y %d.\n", idx, x, y);
-    mock_sprite_buffer[mock_sprite_count].texture_idx = idx;
-    mock_sprite_buffer[mock_sprite_count].x = x;
-    mock_sprite_buffer[mock_sprite_count].y = y;
-    mock_sprite_count++;
-}
-
-void audio_play_chunk(float *chunk, uint16_t len)
-{
-    for (int i = 0; i < len; i++)
-    {
-        audio_buffer->buffer[audio_buffer->tail] = chunk[i];
-
-        audio_buffer->tail += 1;
-
-        if (audio_buffer->tail >= audio_buffer->size) audio_buffer->tail = 0;
-
-        if (audio_buffer->tail == audio_buffer->head)
-        {
-            break;
-        }
-    }
-}
-
-volatile char input_read(void)
-{
-    //printf("input read:\n");
-    char c = wgetch(main_window);
-    return c;
-}
-
-static void init_ncurses(void)
-{
-    initscr();
-
-    noecho();
-    cbreak();
-
-    main_window = newwin(WINDOW_HEIGHT, WINDOW_WIDTH, 0, 0);
-
-    nodelay(main_window, true);
-
-    werase(main_window);
-    wrefresh(main_window);
-}
-
-static void gfx_sync_buffer(void)
-{
-    werase(main_window);
-
-    for (int i = 0; i < mock_sprite_count; i++)
-    {
-        mvwprintw(main_window,
-                (WINDOW_HEIGHT/2)+mock_sprite_buffer[i].y,
-                (WINDOW_WIDTH/2)+mock_sprite_buffer[i].x,
-                "%s [%d,%d]", mock_texture_storage[mock_sprite_buffer[i].texture_idx].name,
-                mock_sprite_buffer[i].y,
-                mock_sprite_buffer[i].x);
-    }
-
-    wrefresh(main_window);
 }
 
 static void load_dynamic(void)
@@ -202,16 +88,10 @@ int main(int argc, char **argv)
 
     load_dynamic();
 
-    audio_buffer = malloc(sizeof(AudioBuffer_t) + (sizeof(float) * 2048));
-    audio_buffer->head = 0;
-    audio_buffer->tail = 0;
-    audio_buffer->size = 2048;
-
-    audio_stream = init_audio(audio_buffer);
-    set_audio(audio_stream, true);
+    audio_init();
 
     printf("Initializing ncurses window.\n");
-    init_ncurses();
+    gfx_init();
 
     Platform_t platform =
     {
