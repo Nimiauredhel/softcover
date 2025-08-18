@@ -3,6 +3,8 @@
 
 #include <ncurses.h>
 
+#include "softcover_platform.h"
+
 #define MOCK_TEXTURE_MAX_COUNT (32)
 #define MOCK_SPRITE_MAX_COUNT (32)
 
@@ -23,8 +25,7 @@ typedef struct MockSprite
 
 volatile char input_read(void);
 void gfx_clear_buffer(void);
-int gfx_load_texture(char *name);
-void gfx_draw_texture(int idx, int x, int y);
+void gfx_draw_texture(TextureRGB_t *texture, int x, int y);
 void gfx_sync_buffer(void);
 void gfx_init(void);
 void gfx_deinit(void);

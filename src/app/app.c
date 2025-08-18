@@ -5,7 +5,7 @@
 
 typedef struct Thing
 {
-    uint8_t texture_id;
+    uint8_t texture_idx;
     int8_t x;
     int8_t y;
 } Thing_t;
@@ -16,7 +16,20 @@ typedef struct AppMemory
     uint16_t controlled_thing;
     float audio_samples[2][1024];
     uint16_t audio_sample_length;
+    uint16_t scratch_size;
+    uint16_t scratch_used;
+    uint8_t scratch_buff[32768];
 } AppMemory_t;
+
+static uint16_t load_texture_to_scratch(char *name, const Platform_t *platform, AppMemory_t *app_memory)
+{
+    uint16_t index = app_memory->scratch_used;
+    TextureRGB_t *texture_ptr = (TextureRGB_t *)&app_memory->scratch_buff[index];
+    platform->gfx_load_texture(name, texture_ptr);
+    uint16_t size = texture_ptr->height * texture_ptr->width * 3;
+    app_memory->scratch_used += size;
+    return index;
+}
 
 /// must match prototype @ref AppInitFunc
 void app_init(const Platform_t *platform, Memory_t **memory_pptr)
@@ -26,13 +39,16 @@ void app_init(const Platform_t *platform, Memory_t **memory_pptr)
 
     AppMemory_t *app_memory = (AppMemory_t *)memory->buffer;
 
-    app_memory->things[0].texture_id = platform->gfx_load_texture("first thing");
-    app_memory->things[0].x = 0;
-    app_memory->things[0].y = 0;
+    app_memory->scratch_size = sizeof(app_memory->scratch_buff);
+    app_memory->scratch_used = 0;
 
-    app_memory->things[1].texture_id = platform->gfx_load_texture("second thing");
+    app_memory->things[0].texture_idx = load_texture_to_scratch("thing1.bmp", platform, app_memory);
+    app_memory->things[0].x = 0;
+    app_memory->things[0].y = 1;
+
+    app_memory->things[1].texture_idx = load_texture_to_scratch("thing2.bmp", platform, app_memory);
     app_memory->things[1].x = 5;
-    app_memory->things[1].y = 5;
+    app_memory->things[1].y = 4;
 
     app_memory->audio_sample_length = 1024;
 
@@ -89,8 +105,8 @@ void app_loop(const Platform_t *platform, Memory_t *memory)
     }
 
     platform->gfx_clear_buffer();
-    platform->gfx_draw_texture(app_memory->things[0].texture_id, app_memory->things[0].x, app_memory->things[0].y);
-    platform->gfx_draw_texture(app_memory->things[1].texture_id, app_memory->things[1].x, app_memory->things[1].y);
+    platform->gfx_draw_texture((TextureRGB_t *)app_memory->scratch_buff+app_memory->things[0].texture_idx, app_memory->things[0].x, app_memory->things[0].y);
+    platform->gfx_draw_texture((TextureRGB_t *)app_memory->scratch_buff+app_memory->things[1].texture_idx, app_memory->things[1].x, app_memory->things[1].y);
 }
 
 /// must match prototype @ref AppExitFunc

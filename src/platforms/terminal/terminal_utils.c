@@ -4,6 +4,9 @@
 #include <signal.h>
 #include <string.h>
 
+#define LOADBMP_IMPLEMENTATION
+#include "loadbmp.h"
+
 /**
  * Global flag set by OS termination signals
  * and polled by functions to allow graceful termination.
@@ -81,4 +84,9 @@ float seconds_since_clock(struct timespec *start_clock)
     float elapsed_float = (now_clock.tv_nsec - start_clock->tv_nsec) / 1000000000.0;
     elapsed_float += (now_clock.tv_sec - start_clock->tv_sec);
     return elapsed_float;
+}
+
+void gfx_load_texture(char *name, TextureRGB_t *dest)
+{
+    loadbmp_decode_file(name, &dest->pixels, &dest->width, &dest->height, LOADBMP_RGB);
 }

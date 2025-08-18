@@ -10,6 +10,30 @@ static MockSprite_t mock_sprite_buffer[MOCK_SPRITE_MAX_COUNT] = {0};
 
 static WINDOW *main_window = NULL;
 
+#define COLOR_PAIR_BLACK (1)
+#define COLOR_PAIR_WHITE (2)
+#define COLOR_PAIR_RED (3)
+#define COLOR_PAIR_GREEN (4)
+#define COLOR_PAIR_BLUE (5)
+#define COLOR_PAIR_YELLOW (6)
+
+static uint8_t gfx_buffer[WINDOW_HEIGHT][WINDOW_WIDTH] = { COLOR_PAIR_YELLOW };
+
+/// TODO: uhhh make this ... better?
+static uint8_t rbg_to_color_pair(uint8_t *pixel)
+{
+    uint16_t sum = pixel[0] + pixel[1] + pixel[2];
+
+    if (sum < 64) return COLOR_PAIR_BLACK;
+    if (sum > 640) return COLOR_PAIR_WHITE;
+
+    if (pixel[0] > pixel[1] + pixel[2]) return COLOR_PAIR_RED;
+    if (pixel[1] > pixel[0] + pixel[2]) return COLOR_PAIR_GREEN;
+    if (pixel[2] > pixel[0] + pixel[1]) return COLOR_PAIR_BLUE;
+
+    return COLOR_PAIR_YELLOW;
+}
+
 volatile char input_read(void)
 {
     //printf("input read:\n");
@@ -19,43 +43,33 @@ volatile char input_read(void)
 
 void gfx_clear_buffer(void)
 {
-    mock_sprite_count = 0;
-    //printf("gfx clear buffer.\n");
+    memset(gfx_buffer, COLOR_PAIR_BLACK, sizeof(gfx_buffer));
 }
 
-int gfx_load_texture(char *name)
+void gfx_draw_texture(TextureRGB_t *texture, int x, int y)
 {
-    if (mock_texture_count >= MOCK_TEXTURE_MAX_COUNT) return -1;
+    uint8_t color = COLOR_PAIR_BLACK;
 
-    strncpy(mock_texture_storage[mock_texture_count].name, name, 32);
-    //printf("gfx load texture: %s.\n", name);
-    mock_texture_count++;
-    return mock_texture_count-1;
-}
-
-void gfx_draw_texture(int idx, int x, int y)
-{
-    if (mock_sprite_count >=MOCK_SPRITE_MAX_COUNT) return;
-
-    //printf("gfx draw texture: idx %d, x %d, y %d.\n", idx, x, y);
-    mock_sprite_buffer[mock_sprite_count].texture_idx = idx;
-    mock_sprite_buffer[mock_sprite_count].x = x;
-    mock_sprite_buffer[mock_sprite_count].y = y;
-    mock_sprite_count++;
+    for (int ypos = 0; ypos < texture->height; ypos++)
+    {
+        for (int xpos = 0; xpos < texture->width; xpos++)
+        {
+            color = rbg_to_color_pair(texture->pixels+xpos+(texture->width * ypos));
+            gfx_buffer[y+ypos][x+xpos] = color;
+        }
+    }
 }
 
 void gfx_sync_buffer(void)
 {
-    werase(main_window);
-
-    for (int i = 0; i < mock_sprite_count; i++)
+    for (int y = 0; y < WINDOW_HEIGHT; y++)
     {
-        mvwprintw(main_window,
-                (WINDOW_HEIGHT/2)+mock_sprite_buffer[i].y,
-                (WINDOW_WIDTH/2)+mock_sprite_buffer[i].x,
-                "%s [%d,%d]", mock_texture_storage[mock_sprite_buffer[i].texture_idx].name,
-                mock_sprite_buffer[i].y,
-                mock_sprite_buffer[i].x);
+        for(int x = 0; x < WINDOW_WIDTH; x++)
+        {
+            wattron(main_window, COLOR_PAIR(gfx_buffer[y][x]));
+            mvwaddch(main_window, y, x, ' ');
+            wattroff(main_window, COLOR_PAIR(gfx_buffer[y][x]));
+        }
     }
 
     wrefresh(main_window);
@@ -65,14 +79,21 @@ void gfx_init(void)
 {
     initscr();
 
+    nodelay(main_window, true);
     noecho();
     cbreak();
 
     main_window = newwin(WINDOW_HEIGHT, WINDOW_WIDTH, 0, 0);
 
-    nodelay(main_window, true);
+    start_color();
 
-    werase(main_window);
+    init_pair(COLOR_PAIR_BLACK, COLOR_WHITE, COLOR_BLACK);
+    init_pair(COLOR_PAIR_WHITE, COLOR_WHITE, COLOR_WHITE);
+    init_pair(COLOR_PAIR_RED, COLOR_WHITE, COLOR_RED);
+    init_pair(COLOR_PAIR_GREEN, COLOR_WHITE, COLOR_GREEN);
+    init_pair(COLOR_PAIR_BLUE, COLOR_WHITE, COLOR_BLUE);
+    init_pair(COLOR_PAIR_YELLOW, COLOR_WHITE, COLOR_YELLOW);
+
     wrefresh(main_window);
 }
 

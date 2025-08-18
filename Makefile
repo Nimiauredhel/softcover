@@ -14,6 +14,7 @@ FLAGS_STRICT= -Wall -pedantic -Wextra
 FLAGS_DEBUG= -ggdb -o0
 DEFINES=-D_GNU_SOURCE -DLIB_NAME=\"./$(LIB_NAME)\"
 BUILD_DIR=build/
+ASSETS_DIR=assets/
 RUN_CMD=./$(EXE_NAME) $(ARGS)
 
 EXE_SUFFIX=.o
@@ -26,6 +27,7 @@ ARGS=
 default:
 	$(MAKE) platform
 	$(MAKE) app
+	cp -r $(ASSETS_DIR)* $(BUILD_DIR)
 
 .PHONY: platform
 platform: $(EXE_PATH)
