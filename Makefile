@@ -8,7 +8,7 @@ LIB_PATH=$(BUILD_DIR)$(LIB_NAME)
 
 COMMON_INCLUDES=-Isrc/common
 EXE_INCLUDES=-lncurses -lportaudio
-LIB_INCLUDES=
+LIB_INCLUDES=-lm
 FLAGS_DEFAULT= -std=c99
 FLAGS_STRICT= -Wall -pedantic -Wextra
 FLAGS_DEBUG= -ggdb -o0

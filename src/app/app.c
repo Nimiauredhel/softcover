@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include <stdint.h>
+#include <math.h>
 
 #include "softcover_platform.h"
 
@@ -16,7 +16,9 @@ typedef struct AppMemory
     Thing_t second_thing;
     Thing_t *controlled_thing;
     uint16_t audio_sample_length;
-    Memory_t *audio_sample;
+    Memory_t *first_audio_sample;
+    Memory_t *second_audio_sample;
+    float *sample_to_play;
 } AppMemory_t;
 
 /// must match prototype @ref AppInitFunc
@@ -35,16 +37,21 @@ void app_init(Platform_t *platform, Memory_t **memory_pptr)
     app_memory->second_thing.x = 5;
     app_memory->second_thing.y = 5;
 
-    app_memory->controlled_thing = &app_memory->first_thing;
-
     app_memory->audio_sample_length = 1024;
-    app_memory->audio_sample = platform->memory_allocate(sizeof(float) * app_memory->audio_sample_length);
+    app_memory->first_audio_sample = platform->memory_allocate(sizeof(float) * app_memory->audio_sample_length);
+    app_memory->second_audio_sample = platform->memory_allocate(sizeof(float) * app_memory->audio_sample_length);
 
     for (int i = 0; i < app_memory->audio_sample_length; i+=2)
     {
-        ((float *)app_memory->audio_sample->buffer)[i] = -1.0f + ((float)i/(float)app_memory->audio_sample_length);
-        ((float *)app_memory->audio_sample->buffer)[i+1] = -1.0f + ((float)i/(float)app_memory->audio_sample_length);
+        ((float *)app_memory->first_audio_sample->buffer)[i] = -1.0f + (2 * (float)i/(float)app_memory->audio_sample_length);
+        ((float *)app_memory->first_audio_sample->buffer)[i+1] = -1.0f + (2 * (float)i/(float)app_memory->audio_sample_length);
+
+        ((float *)app_memory->second_audio_sample->buffer)[i] = sinf((float)i/(float)app_memory->audio_sample_length);
+        ((float *)app_memory->second_audio_sample->buffer)[i+1] = sinf((float)i/(float)app_memory->audio_sample_length);
     }
+
+    app_memory->controlled_thing = &app_memory->first_thing;
+    app_memory->sample_to_play = (float *)app_memory->first_audio_sample->buffer;
 }
 
 /// must match prototype @ref AppLoopFunc
@@ -60,25 +67,31 @@ void app_loop(Platform_t *platform, Memory_t *memory)
     {
         case 'w':
             app_memory->controlled_thing->y -= mov_speed;
-            platform->audio_play_chunk((float *)app_memory->audio_sample->buffer, app_memory->audio_sample_length);
+            platform->audio_play_chunk(app_memory->sample_to_play, app_memory->audio_sample_length);
             break;
         case 'a':
             app_memory->controlled_thing->x -= mov_speed;
-            platform->audio_play_chunk((float *)app_memory->audio_sample->buffer, app_memory->audio_sample_length);
+            platform->audio_play_chunk(app_memory->sample_to_play, app_memory->audio_sample_length);
             break;
         case 's':
             app_memory->controlled_thing->y += mov_speed;
-            platform->audio_play_chunk((float *)app_memory->audio_sample->buffer, app_memory->audio_sample_length);
+            platform->audio_play_chunk(app_memory->sample_to_play, app_memory->audio_sample_length);
             break;
         case 'd':
             app_memory->controlled_thing->x += mov_speed;
-            platform->audio_play_chunk((float *)app_memory->audio_sample->buffer, app_memory->audio_sample_length);
+            platform->audio_play_chunk(app_memory->sample_to_play, app_memory->audio_sample_length);
             break;
         case 'q':
-            app_memory->controlled_thing =
-                app_memory->controlled_thing == &app_memory->first_thing
-                ? &app_memory->second_thing
-                : &app_memory->first_thing;
+            if (app_memory->controlled_thing == &app_memory->first_thing)
+            {
+                app_memory->controlled_thing = &app_memory->second_thing;
+                app_memory->sample_to_play = (float *)app_memory->second_audio_sample->buffer;
+            }
+            else
+            {
+                app_memory->controlled_thing = &app_memory->first_thing;
+                app_memory->sample_to_play = (float *)app_memory->first_audio_sample->buffer;
+            }
             break;
         default:
             break;
