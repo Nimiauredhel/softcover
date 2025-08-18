@@ -7,11 +7,12 @@ LIB_SRC_DIR=src/app/
 LIB_PATH=$(BUILD_DIR)$(LIB_NAME)
 
 COMMON_INCLUDES=-Isrc/common
-EXE_INCLUDES=-lncurses
+EXE_INCLUDES=-lncurses -lportaudio -lm
 LIB_INCLUDES=
-FLAGS_DEFAULT=-DLIB_NAME=\"./$(LIB_NAME)\"
-FLAGS_STRICT=$(FLAGS_DEFAULT) -std=c99 -Wall -pedantic -Wextra
-FLAGS_DEBUG=$(FLAGS_STRICT) -g -o0
+FLAGS_DEFAULT= -std=c99
+FLAGS_STRICT= -Wall -pedantic -Wextra
+FLAGS_DEBUG= -ggdb -o0
+DEFINES=-D_GNU_SOURCE -DLIB_NAME=\"./$(LIB_NAME)\"
 BUILD_DIR=build/
 RUN_CMD=$(EXE_PATH) $(LIB_PATH) $(ARGS)
 
@@ -35,26 +36,24 @@ app: $(LIB_PATH)
 $(EXE_PATH): $(EXE_SRC_DIR)*.c
 	mkdir -p $(BUILD_DIR)
 	rm -f compile_commands.json
-	bear -- gcc -o $(EXE_PATH) $(EXE_SRC_DIR)*.c $(FLAGS) $(COMMON_INCLUDES) $(EXE_INCLUDES)
+	bear -- gcc $(EXE_SRC_DIR)*.c $(COMMON_INCLUDES) $(EXE_INCLUDES) $(DEFINES) $(FLAGS) -o $(EXE_PATH)
 	mv compile_commands.json $(BUILD_DIR)platform_compile_commands.json
 	jq -s add $(BUILD_DIR)*.json > compile_commands.json
 
 $(LIB_PATH): $(LIB_SRC_DIR)*.c
 	mkdir -p $(BUILD_DIR)
 	rm -f compile_commands.json
-	bear -- gcc -shared -o $(LIB_PATH) -fPIC $(LIB_SRC_DIR)*.c $(FLAGS) $(COMMON_INCLUDES) $(LIB_INCLUDES) 
+	bear -- gcc $(LIB_SRC_DIR)*.c $(COMMON_INCLUDES) $(LIB_INCLUDES) $(DEFINES) -fPIC $(FLAGS) -shared -o $(LIB_PATH)
 	mv compile_commands.json $(BUILD_DIR)app_compile_commands.json
 	jq -s add $(BUILD_DIR)*.json > compile_commands.json
                                      
 .PHONY: strict
 strict:
-	$(FLAGS)=$(FLAGS_STRICT)
-	$(MAKE) default
+	$(MAKE) default FLAGS+=$(FLAGS_STRICT)
                     
 .PHONY: debug
 debug:
-	$(FLAGS)=$(FLAGS_DEBUG)
-	$(MAKE) default
+	$(MAKE) default FLAGS+=$(FLAGS_DEBUG)
 
 .PHONY: clean
 clean:
@@ -71,7 +70,7 @@ run:
 
 .PHONY: gdb
 gdb:
-	gdb $(RUN_CMD)
+	gdb --args $(RUN_CMD)
 
 .PHONY: valgrind
 valgrind:

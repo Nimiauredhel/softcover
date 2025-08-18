@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +8,7 @@
 #include <sys/stat.h>                                                                                                                                                                                                                     
 
 #include <ncurses.h>
+#include "audio.h"
 
 #include "softcover_platform.h"
 
@@ -34,6 +36,8 @@ static void (*func_handle)(void) = NULL;
 static AppInitFunc app_init;
 static AppLoopFunc app_loop;
 
+static PaStream *audio_stream;
+
 typedef struct MockTexture
 {
     char name[32];
@@ -53,6 +57,8 @@ static MockTexture_t mock_texture_storage[MOCK_TEXTURE_MAX_COUNT] = {0};
 static MockSprite_t mock_sprite_buffer[MOCK_SPRITE_MAX_COUNT] = {0};
 
 static WINDOW *main_window = NULL;
+
+static AudioBuffer_t *audio_buffer = NULL;
 
 Memory_t* memory_allocate(size_t size)
 {
@@ -94,11 +100,73 @@ void gfx_draw_texture(int idx, int x, int y)
     mock_sprite_count++;
 }
 
+void audio_play_chunk(float *chunk, uint16_t len)
+{
+    for (int i = 0; i < len; i++)
+    {
+        audio_buffer->buffer[audio_buffer->tail] = chunk[i];
+
+        audio_buffer->tail += 1;
+
+        if (audio_buffer->tail >= audio_buffer->size) audio_buffer->tail = 0;
+
+        if (audio_buffer->tail == audio_buffer->head)
+        {
+            break;
+        }
+    }
+}
+
 volatile char input_read(void)
 {
     //printf("input read:\n");
     char c = wgetch(main_window);
     return c;
+}
+
+static void feed_audio_stream(void)
+{
+    static const uint16_t max_frames_per_feed = 1024;
+
+    if (audio_buffer->head != audio_buffer->tail)
+    {
+        uint16_t head_portion = 0;
+        uint16_t tail_portion = 0;
+
+        if (audio_buffer->tail > audio_buffer->head)
+        {
+            head_portion = audio_buffer->tail - audio_buffer->head;
+            tail_portion = 0;
+        }
+        else
+        {
+            head_portion = audio_buffer->size - audio_buffer->head;
+            tail_portion = audio_buffer->tail;
+        }
+
+        if (head_portion >= max_frames_per_feed)
+        {
+            head_portion = max_frames_per_feed;
+            tail_portion = 0;
+        }
+        else if (head_portion + tail_portion > max_frames_per_feed)
+        {
+            tail_portion = max_frames_per_feed - head_portion;
+        }
+
+        write_audio(audio_stream,
+                    audio_buffer->buffer + audio_buffer->head,
+                    head_portion);
+        audio_buffer->head += head_portion;
+
+        if (tail_portion > 0)
+        {
+            write_audio(audio_stream,
+                        audio_buffer->buffer,
+                        tail_portion);
+            audio_buffer->head = tail_portion;
+        }
+    }
 }
 
 static void init_ncurses(void)
@@ -165,21 +233,29 @@ int main(int argc, char **argv)
 {
     static struct stat file_stat = {0};
 
-    //printf("Program started.\n");
+    printf("Program started.\n");
 
     if (argc > 1)
     {
         snprintf(lib_path, sizeof(lib_path), "%s", argv[1]);
-        //printf("Using given library path: %s.\n", lib_path);
+        printf("Using given library path: %s.\n", lib_path);
     }
     else
     {
-        //printf("Using default library path: %s.\n", lib_path);
+        printf("Using default library path: %s.\n", lib_path);
     }
 
     load_dynamic();
 
-    //printf("Initializing ncurses window.\n");
+    audio_buffer = malloc(sizeof(AudioBuffer_t) + (sizeof(float) * 2048));
+    audio_buffer->head = 0;
+    audio_buffer->tail = 0;
+    audio_buffer->size = 2048;
+
+    audio_stream = init_audio(audio_buffer);
+    set_audio(audio_stream, true);
+
+    printf("Initializing ncurses window.\n");
     init_ncurses();
 
     Platform_t platform =
@@ -190,6 +266,7 @@ int main(int argc, char **argv)
         .gfx_draw_texture = gfx_draw_texture,
         .gfx_load_texture = gfx_load_texture,
         .input_read = input_read,
+        .audio_play_chunk = audio_play_chunk,
     };
 
     Memory_t *app_state_mem = NULL;
@@ -213,6 +290,7 @@ int main(int argc, char **argv)
         }
 
         gfx_sync_buffer();
+        //feed_audio_stream();
 
         stat(lib_path, &file_stat);
         lib_modified_time = file_stat.st_mtime;

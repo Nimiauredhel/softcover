@@ -22,7 +22,7 @@ struct Platform
     // input
     volatile char (*input_read)(void);
     // audio
-    // TODO: define audio interface
+    void (*audio_play_chunk)(float *chunk, uint16_t len);
     // storage
     // TODO: define storage interface
 
