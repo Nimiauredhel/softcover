@@ -7,8 +7,8 @@
 typedef struct Platform Platform_t;
 typedef struct Memory Memory_t;
 
-typedef void (*AppInitFunc)(Platform_t *platform, Memory_t **memory_pptr);
-typedef void (*AppLoopFunc)(Platform_t *platform, Memory_t *memory);
+typedef void (*AppInitFunc)(const Platform_t *platform, Memory_t **memory_pptr);
+typedef void (*AppLoopFunc)(const Platform_t *platform, Memory_t *memory);
 
 struct Platform
 {
@@ -24,7 +24,8 @@ struct Platform
     // audio
     void (*audio_play_chunk)(float *chunk, uint16_t len);
     // storage
-    // TODO: define storage interface
+    void (*storage_save_state)(char *state_name);
+    void (*storage_load_state)(char *state_name);
 
 };
 

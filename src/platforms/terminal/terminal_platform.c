@@ -15,8 +15,28 @@
 #define LIB_NAME ""
 #endif
 
+Memory_t* memory_allocate(size_t size);
+void memory_release(Memory_t *memory);
+void storage_save_state(char *state_name);
+void storage_load_state(char *state_name);
+
+static const Platform_t platform =
+{
+    .memory_allocate = memory_allocate,
+    .memory_release = memory_release,
+    .gfx_clear_buffer = gfx_clear_buffer,
+    .gfx_draw_texture = gfx_draw_texture,
+    .gfx_load_texture = gfx_load_texture,
+    .input_read = input_read,
+    .audio_play_chunk = audio_play_chunk,
+    .storage_save_state = storage_save_state,
+    .storage_load_state = storage_load_state,
+};
+
 static const char *app_init_name = "app_init";
 static const char *app_loop_name = "app_loop";
+
+static const char *state_filename_format = "%.state";
 
 static char lib_path[256] = LIB_NAME;
 
@@ -28,6 +48,8 @@ static void (*func_handle)(void) = NULL;
 
 static AppInitFunc app_init;
 static AppLoopFunc app_loop;
+
+static Memory_t *app_main_memory = NULL;
 
 Memory_t* memory_allocate(size_t size)
 {
@@ -42,7 +64,57 @@ void memory_release(Memory_t *memory)
     free(memory);
 }
 
-static void load_dynamic(void)
+void storage_save_state(char *state_name)
+{
+    char file_name[256] = {0};
+    FILE *file = NULL;
+
+    snprintf(file_name, sizeof(file_name), state_filename_format, state_name);
+
+    file = fopen(file_name, "wb");
+
+    if (file == NULL)
+    {
+        perror("Failed to create file");
+        //exit(EXIT_FAILURE);
+    }
+    
+    fwrite(app_main_memory->buffer, 1, app_main_memory->size, file);
+    fclose(file);
+}
+
+void storage_load_state(char *state_name)
+{
+    char file_name[256] = {0};
+    size_t file_size = 0;
+    FILE *file = NULL;
+
+    snprintf(file_name, sizeof(file_name), state_filename_format, state_name);
+
+    file = fopen(file_name, "rb");
+
+    if (file == NULL)
+    {
+        perror("Failed to open file");
+        //exit(EXIT_FAILURE);
+    }
+
+    fseek(file, 0, SEEK_END);
+    file_size = ftell(file);
+
+    if (file_size != app_main_memory->size)
+    {
+        memory_release(app_main_memory);
+        app_main_memory = memory_allocate(file_size);
+    }
+
+    rewind(file);
+    
+    fread(app_main_memory->buffer, 1, file_size, file);
+    fclose(file);
+}
+
+static void load_app(void)
 {
     //printf("Loading dynamic library.\n");
 
@@ -86,29 +158,13 @@ int main(int argc, char **argv)
         printf("Using default library path: %s.\n", lib_path);
     }
 
-    load_dynamic();
-
+    load_app();
     audio_init();
-
-    printf("Initializing ncurses window.\n");
     gfx_init();
-
-    Platform_t platform =
-    {
-        .memory_allocate = memory_allocate,
-        .memory_release = memory_release,
-        .gfx_clear_buffer = gfx_clear_buffer,
-        .gfx_draw_texture = gfx_draw_texture,
-        .gfx_load_texture = gfx_load_texture,
-        .input_read = input_read,
-        .audio_play_chunk = audio_play_chunk,
-    };
-
-    Memory_t *app_state_mem = NULL;
 
     if (app_init != NULL)
     {
-        app_init(&platform, &app_state_mem);
+        app_init(&platform, &app_main_memory);
     }
     else
     {
@@ -118,7 +174,7 @@ int main(int argc, char **argv)
     {
         if (app_loop != NULL)
         {
-            app_loop(&platform, app_state_mem);
+            app_loop(&platform, app_main_memory);
         }
         else
         {
@@ -132,7 +188,7 @@ int main(int argc, char **argv)
         if (lib_modified_time != lib_load_time)
         {
             //printf("Library modification detected.\n");
-            load_dynamic();
+            load_app();
         }
 
         usleep(16000);

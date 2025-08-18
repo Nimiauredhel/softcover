@@ -14,7 +14,7 @@ FLAGS_STRICT= -Wall -pedantic -Wextra
 FLAGS_DEBUG= -ggdb -o0
 DEFINES=-D_GNU_SOURCE -DLIB_NAME=\"./$(LIB_NAME)\"
 BUILD_DIR=build/
-RUN_CMD=$(EXE_PATH) $(LIB_PATH) $(ARGS)
+RUN_CMD=./$(EXE_NAME) $(ARGS)
 
 EXE_SUFFIX=.o
 LIB_SUFFIX=.so
@@ -64,14 +64,18 @@ andrun:
 	$(MAKE) default
 	$(MAKE) run
 
+.ONESHELL:
 .PHONY: run
 run:
+	cd $(BUILD_DIR)
 	$(RUN_CMD)
 
 .PHONY: gdb
 gdb:
+	cd $(BUILD_DIR)
 	gdb --args $(RUN_CMD)
 
 .PHONY: valgrind
 valgrind:
+	cd $(BUILD_DIR)
 	valgrind -s --leak-check=yes --track-origins=yes $(RUN_CMD)
