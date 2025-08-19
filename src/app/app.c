@@ -120,8 +120,8 @@ void app_loop(const Platform_t *platform, Memory_t *memory)
     }
 
     platform->gfx_clear_buffer();
-    platform->gfx_draw_texture((TextureRGB_t *)app_memory->scratch_buff+app_memory->things[0].texture_idx, app_memory->things[0].x, app_memory->things[0].y);
-    platform->gfx_draw_texture((TextureRGB_t *)app_memory->scratch_buff+app_memory->things[1].texture_idx, app_memory->things[1].x, app_memory->things[1].y);
+    platform->gfx_draw_texture((TextureRGB_t *)(app_memory->scratch_buff+app_memory->things[0].texture_idx), app_memory->things[0].x, app_memory->things[0].y);
+    platform->gfx_draw_texture((TextureRGB_t *)(app_memory->scratch_buff+app_memory->things[1].texture_idx), app_memory->things[1].x, app_memory->things[1].y);
 }
 
 /// must match prototype @ref AppExitFunc

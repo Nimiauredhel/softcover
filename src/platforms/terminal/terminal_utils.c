@@ -1,4 +1,5 @@
 #include "terminal_utils.h"
+#include "terminal_ncurses.h"
 
 #include <stdlib.h>
 #include <signal.h>
@@ -88,5 +89,15 @@ float seconds_since_clock(struct timespec *start_clock)
 
 void gfx_load_texture(char *name, TextureRGB_t *dest)
 {
-    loadbmp_decode_file(name, &dest->pixels, &dest->width, &dest->height, LOADBMP_RGB);
+    static char debug_buff[128] = {0};
+
+    uint32_t ret = loadbmp_decode_file(name, &dest->pixels, &dest->width, &dest->height, LOADBMP_RGB);
+
+    if (ret != 0)
+    {
+        snprintf(debug_buff, sizeof(debug_buff), "Error code %d while loading %s (%dx%d).",
+            ret, name, dest->width, dest->height);
+        debug_log(debug_buff);
+        debug_break();
+    }
 }
