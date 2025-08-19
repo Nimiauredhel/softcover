@@ -23,7 +23,7 @@ struct Platform
     void (*gfx_load_texture)(char *name, TextureRGB_t *dest);
     void (*gfx_draw_texture)(TextureRGB_t *texture, int x, int y);
     // input
-    volatile char (*input_read)(void);
+    char (*input_read)(void);
     // audio
     void (*audio_play_chunk)(float *chunk, uint16_t len);
     // storage
@@ -32,6 +32,7 @@ struct Platform
     // utils
     bool (*get_should_terminate)(void);
     void (*set_should_terminate)(bool value);
+    void (*debug_log)(char *message);
 
 };
 

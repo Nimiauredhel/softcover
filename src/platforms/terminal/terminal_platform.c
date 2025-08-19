@@ -27,15 +27,21 @@ static const Platform_t platform =
 {
     .memory_allocate = memory_allocate,
     .memory_release = memory_release,
+
     .gfx_clear_buffer = gfx_clear_buffer,
     .gfx_draw_texture = gfx_draw_texture,
     .gfx_load_texture = gfx_load_texture,
+
     .input_read = input_read,
+
     .audio_play_chunk = audio_play_chunk,
+
     .storage_save_state = storage_save_state,
     .storage_load_state = storage_load_state,
+
     .get_should_terminate = get_should_terminate,
     .set_should_terminate = set_should_terminate,
+    .debug_log = debug_log,
 };
 
 static const char *app_init_name = "app_init";

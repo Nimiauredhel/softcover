@@ -2,13 +2,8 @@
 
 #include <string.h>
 
-static uint8_t mock_texture_count = 0;
-static uint8_t mock_sprite_count = 0;
-
-static MockTexture_t mock_texture_storage[MOCK_TEXTURE_MAX_COUNT] = {0};
-static MockSprite_t mock_sprite_buffer[MOCK_SPRITE_MAX_COUNT] = {0};
-
 static WINDOW *main_window = NULL;
+static WINDOW *debug_window = NULL;
 
 #define COLOR_PAIR_BLACK (1)
 #define COLOR_PAIR_WHITE (2)
@@ -17,7 +12,7 @@ static WINDOW *main_window = NULL;
 #define COLOR_PAIR_BLUE (5)
 #define COLOR_PAIR_YELLOW (6)
 
-static uint8_t gfx_buffer[WINDOW_HEIGHT][WINDOW_WIDTH] = { COLOR_PAIR_YELLOW };
+static uint8_t gfx_buffer[WINDOW_HEIGHT][WINDOW_WIDTH] = { { COLOR_PAIR_YELLOW } };
 
 /// TODO: uhhh make this ... better?
 static uint8_t rbg_to_color_pair(uint8_t *pixel)
@@ -34,7 +29,7 @@ static uint8_t rbg_to_color_pair(uint8_t *pixel)
     return COLOR_PAIR_YELLOW;
 }
 
-volatile char input_read(void)
+char input_read(void)
 {
     //printf("input read:\n");
     char c = wgetch(main_window);
@@ -46,22 +41,35 @@ void gfx_clear_buffer(void)
     memset(gfx_buffer, COLOR_PAIR_BLACK, sizeof(gfx_buffer));
 }
 
-void gfx_draw_texture(TextureRGB_t *texture, int x, int y)
+void gfx_draw_texture(TextureRGB_t *texture, int start_x, int start_y)
 {
     uint8_t color = COLOR_PAIR_BLACK;
 
-    for (int ypos = 0; ypos < texture->height; ypos++)
+    int final_x;
+    int final_y;
+
+    for (uint16_t texture_y = 0; texture_y < texture->height; texture_y++)
     {
-        for (int xpos = 0; xpos < texture->width; xpos++)
+        for (uint16_t texture_x = 0; texture_x < texture->width; texture_x++)
         {
-            color = rbg_to_color_pair(texture->pixels+xpos+(texture->width * ypos));
-            gfx_buffer[y+ypos][x+xpos] = color;
+            final_y = start_y + texture_y;
+            final_x = start_x + texture_x;
+
+            while(final_y >= WINDOW_HEIGHT) final_y -= WINDOW_HEIGHT;
+            while(final_y < 0) final_y += WINDOW_HEIGHT;
+            while(final_x >= WINDOW_WIDTH) final_x -= WINDOW_WIDTH;
+            while(final_x < 0) final_x += WINDOW_WIDTH;
+
+            color = rbg_to_color_pair(texture->pixels+texture_x+(texture->width * texture_y));
+            gfx_buffer[final_y][final_x] = color;
         }
     }
 }
 
 void gfx_sync_buffer(void)
 {
+    werase(main_window);
+
     for (int y = 0; y < WINDOW_HEIGHT; y++)
     {
         for(int x = 0; x < WINDOW_WIDTH; x++)
@@ -75,15 +83,33 @@ void gfx_sync_buffer(void)
     wrefresh(main_window);
 }
 
+void debug_log(char *message)
+{
+    werase(debug_window);
+
+    wattron(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
+    mvwprintw(debug_window, 0, 0, "%s", "DEBUG");
+    wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
+
+    wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BLACK));
+    mvwprintw(debug_window, 1, 1, "%s", message);
+    wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
+
+    wrefresh(debug_window);
+}
+
 void gfx_init(void)
 {
     initscr();
 
-    nodelay(main_window, true);
     noecho();
     cbreak();
 
     main_window = newwin(WINDOW_HEIGHT, WINDOW_WIDTH, 0, 0);
+    debug_window = newwin(DEBUG_WINDOW_HEIGHT, DEBUG_WINDOW_WIDTH, WINDOW_HEIGHT, 0);
+
+    nodelay(main_window, true);
+    nodelay(debug_window, true);
 
     start_color();
 
@@ -95,6 +121,7 @@ void gfx_init(void)
     init_pair(COLOR_PAIR_YELLOW, COLOR_WHITE, COLOR_YELLOW);
 
     wrefresh(main_window);
+    debug_log("Gfx initialized.");
 }
 
 void gfx_deinit(void)

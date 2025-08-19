@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <math.h>
+#include <stdio.h>
 
 #include "softcover_platform.h"
 
@@ -26,7 +27,7 @@ static uint16_t load_texture_to_scratch(char *name, const Platform_t *platform, 
     uint16_t index = app_memory->scratch_used;
     TextureRGB_t *texture_ptr = (TextureRGB_t *)&app_memory->scratch_buff[index];
     platform->gfx_load_texture(name, texture_ptr);
-    uint16_t size = texture_ptr->height * texture_ptr->width * 3;
+    uint16_t size = sizeof(TextureRGB_t) + (texture_ptr->height * texture_ptr->width * 1);
     app_memory->scratch_used += size;
     return index;
 }
@@ -68,6 +69,8 @@ void app_init(const Platform_t *platform, Memory_t **memory_pptr)
 void app_loop(const Platform_t *platform, Memory_t *memory)
 {
     static const int8_t mov_speed = 1;
+    
+    static char debug_buff[128] = {0};
 
     AppMemory_t *app_memory = (AppMemory_t *)memory->buffer;
 
@@ -78,18 +81,30 @@ void app_loop(const Platform_t *platform, Memory_t *memory)
         case 'w':
             app_memory->things[app_memory->controlled_thing].y -= mov_speed;
             platform->audio_play_chunk(app_memory->audio_samples[app_memory->controlled_thing], app_memory->audio_sample_length);
+            snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", app_memory->controlled_thing,
+                    app_memory->things[app_memory->controlled_thing].x, app_memory->things[app_memory->controlled_thing].y);
+            platform->debug_log(debug_buff);
             break;
         case 'a':
             app_memory->things[app_memory->controlled_thing].x -= mov_speed;
             platform->audio_play_chunk(app_memory->audio_samples[app_memory->controlled_thing], app_memory->audio_sample_length);
+            snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", app_memory->controlled_thing,
+                    app_memory->things[app_memory->controlled_thing].x, app_memory->things[app_memory->controlled_thing].y);
+            platform->debug_log(debug_buff);
             break;
         case 's':
             app_memory->things[app_memory->controlled_thing].y += mov_speed;
             platform->audio_play_chunk(app_memory->audio_samples[app_memory->controlled_thing], app_memory->audio_sample_length);
+            snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", app_memory->controlled_thing,
+                    app_memory->things[app_memory->controlled_thing].x, app_memory->things[app_memory->controlled_thing].y);
+            platform->debug_log(debug_buff);
             break;
         case 'd':
             app_memory->things[app_memory->controlled_thing].x += mov_speed;
             platform->audio_play_chunk(app_memory->audio_samples[app_memory->controlled_thing], app_memory->audio_sample_length);
+            snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", app_memory->controlled_thing,
+                    app_memory->things[app_memory->controlled_thing].x, app_memory->things[app_memory->controlled_thing].y);
+            platform->debug_log(debug_buff);
             break;
         case 'q':
             app_memory->controlled_thing = app_memory->controlled_thing == 0 ? 1 : 0;

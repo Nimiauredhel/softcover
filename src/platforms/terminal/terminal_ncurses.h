@@ -11,6 +11,9 @@
 #define WINDOW_HEIGHT (32)
 #define WINDOW_WIDTH (128)
 
+#define DEBUG_WINDOW_HEIGHT (32)
+#define DEBUG_WINDOW_WIDTH (128)
+
 typedef struct MockTexture
 {
     char name[32];
@@ -23,10 +26,11 @@ typedef struct MockSprite
     int y;
 } MockSprite_t;
 
-volatile char input_read(void);
+char input_read(void);
 void gfx_clear_buffer(void);
 void gfx_draw_texture(TextureRGB_t *texture, int x, int y);
 void gfx_sync_buffer(void);
+void debug_log(char *message);
 void gfx_init(void);
 void gfx_deinit(void);
 
