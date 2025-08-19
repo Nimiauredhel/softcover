@@ -6,9 +6,9 @@
 
 typedef struct Thing
 {
-    uint8_t texture_idx;
-    int8_t x;
-    int8_t y;
+    uint16_t texture_idx;
+    int16_t x;
+    int16_t y;
 } Thing_t;
 
 typedef struct AppMemory
@@ -25,7 +25,7 @@ typedef struct AppMemory
 static uint16_t load_texture_to_scratch(char *name, const Platform_t *platform, AppMemory_t *app_memory)
 {
     uint16_t index = app_memory->scratch_used;
-    TextureRGB_t *texture_ptr = (TextureRGB_t *)&app_memory->scratch_buff[index];
+    TextureRGB_t *texture_ptr = (TextureRGB_t *)(app_memory->scratch_buff+index);
     platform->gfx_load_texture(name, texture_ptr);
     uint16_t size = sizeof(TextureRGB_t) + (texture_ptr->height * texture_ptr->width * 1);
     app_memory->scratch_used += size;

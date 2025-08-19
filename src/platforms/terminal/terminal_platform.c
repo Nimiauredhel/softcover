@@ -42,6 +42,7 @@ static const Platform_t platform =
     .get_should_terminate = get_should_terminate,
     .set_should_terminate = set_should_terminate,
     .debug_log = debug_log,
+    .debug_break = debug_break,
 };
 
 static const char *app_init_name = "app_init";

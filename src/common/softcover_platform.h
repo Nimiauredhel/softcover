@@ -33,6 +33,7 @@ struct Platform
     bool (*get_should_terminate)(void);
     void (*set_should_terminate)(bool value);
     void (*debug_log)(char *message);
+    void (*debug_break)(void);
 
 };
 

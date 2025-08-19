@@ -1,4 +1,5 @@
 #include "terminal_ncurses.h"
+#include "terminal_utils.h"
 
 #include <string.h>
 
@@ -13,6 +14,8 @@ static WINDOW *debug_window = NULL;
 #define COLOR_PAIR_YELLOW (6)
 
 static uint8_t gfx_buffer[WINDOW_HEIGHT][WINDOW_WIDTH] = { { COLOR_PAIR_YELLOW } };
+
+static char debug_window_message[128] = {0};
 
 /// TODO: uhhh make this ... better?
 static uint8_t rbg_to_color_pair(uint8_t *pixel)
@@ -85,6 +88,8 @@ void gfx_sync_buffer(void)
 
 void debug_log(char *message)
 {
+    snprintf(debug_window_message, sizeof(debug_window_message), "%s", message);
+
     werase(debug_window);
 
     wattron(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
@@ -92,10 +97,34 @@ void debug_log(char *message)
     wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
 
     wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BLACK));
-    mvwprintw(debug_window, 1, 1, "%s", message);
+    mvwprintw(debug_window, 1, 1, "%s", debug_window_message);
     wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
 
     wrefresh(debug_window);
+}
+
+void debug_break(void)
+{
+    werase(debug_window);
+
+    wattron(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
+    mvwprintw(debug_window, 0, 0, "%s", "BREAK - c to continue");
+    wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
+
+    wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BLACK));
+    mvwprintw(debug_window, 1, 1, "%s", debug_window_message);
+    wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
+
+    wrefresh(debug_window);
+
+    char c = '~';
+
+    while(c != 'c' && !should_terminate)
+    {
+        c = input_read();
+    }
+
+    debug_log("Resumed.");
 }
 
 void gfx_init(void)
