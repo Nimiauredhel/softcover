@@ -13,12 +13,22 @@ static WINDOW *debug_window = NULL;
 #define COLOR_PAIR_BLUE (5)
 #define COLOR_PAIR_YELLOW (6)
 
-static uint8_t gfx_buffer[WINDOW_HEIGHT][WINDOW_WIDTH] = { { COLOR_PAIR_YELLOW } };
+#define DEBUG_RING_CAPACITY (10)
+#define DEBUG_MESSAGE_MAX_LEN (128)
 
-static char debug_window_message[128] = {0};
+typedef struct DebugRing
+{
+    uint8_t head;
+    uint8_t tail;
+    char debug_messages[DEBUG_RING_CAPACITY][DEBUG_MESSAGE_MAX_LEN];
+} DebugRing_t;
+
+static uint8_t gfx_buffer[WINDOW_HEIGHT][WINDOW_WIDTH] = { { COLOR_PAIR_YELLOW } };
+static DebugRing_t debug_ring = {0};
+static bool debug_is_break = false;
 
 /// TODO: uhhh make this ... better?
-static uint8_t rbg_to_color_pair(uint8_t *pixel)
+static uint8_t rgb_to_color_pair(uint8_t *pixel)
 {
     uint16_t sum = pixel[0] + pixel[1] + pixel[2];
 
@@ -30,6 +40,32 @@ static uint8_t rbg_to_color_pair(uint8_t *pixel)
     if (pixel[2] > pixel[0] + pixel[1]) return COLOR_PAIR_BLUE;
 
     return COLOR_PAIR_YELLOW;
+}
+
+static void debug_refresh_window(void)
+{
+    werase(debug_window);
+
+    wattron(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
+    mvwprintw(debug_window, 0, 0, "%s", debug_is_break ? "BREAK - c to continue" : "DEBUG");
+    wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
+
+    uint8_t idx = debug_ring.head;
+    uint8_t row = 1;
+
+    do
+    {
+        wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BLACK));
+        mvwprintw(debug_window, row, 1, "%s", debug_ring.debug_messages[idx]);
+        wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
+
+        row++;
+        idx++;
+        if (idx >= DEBUG_RING_CAPACITY) idx = 0;
+    }
+    while(idx != debug_ring.tail);
+
+    wrefresh(debug_window);
 }
 
 char input_read(void)
@@ -46,6 +82,8 @@ void gfx_clear_buffer(void)
 
 void gfx_draw_texture(TextureRGB_t *texture, int start_x, int start_y)
 {
+    static char debug_buff[128] = {0};
+
     uint8_t color = COLOR_PAIR_BLACK;
 
     int final_x;
@@ -63,7 +101,10 @@ void gfx_draw_texture(TextureRGB_t *texture, int start_x, int start_y)
             while(final_x >= WINDOW_WIDTH) final_x -= WINDOW_WIDTH;
             while(final_x < 0) final_x += WINDOW_WIDTH;
 
-            color = rbg_to_color_pair(texture->pixels+texture_x+(texture->width * texture_y));
+            snprintf(debug_buff, sizeof(debug_buff), "Writing to gfx buffer %p at [%d,%d] from texture %p at [%d,%d]",
+                    (void *)gfx_buffer, final_x, final_y, (void *)texture->pixels, texture_x, texture_y);
+            debug_log(debug_buff);
+            color = rgb_to_color_pair(texture->pixels+texture_x+(texture->width * texture_y));
             gfx_buffer[final_y][final_x] = color;
         }
     }
@@ -88,34 +129,19 @@ void gfx_sync_buffer(void)
 
 void debug_log(char *message)
 {
-    snprintf(debug_window_message, sizeof(debug_window_message), "%s", message);
+    snprintf(debug_ring.debug_messages[debug_ring.tail], DEBUG_MESSAGE_MAX_LEN, "%s", message);
+    debug_ring.tail++;
+    if (debug_ring.tail >= DEBUG_RING_CAPACITY) debug_ring.tail = 0;
+    if (debug_ring.tail == debug_ring.head) debug_ring.head++;
+    if (debug_ring.head >= DEBUG_RING_CAPACITY) debug_ring.head = 0;
 
-    werase(debug_window);
+    debug_refresh_window();
 
-    wattron(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
-    mvwprintw(debug_window, 0, 0, "%s", "DEBUG");
-    wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
-
-    wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BLACK));
-    mvwprintw(debug_window, 1, 1, "%s", debug_window_message);
-    wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
-
-    wrefresh(debug_window);
 }
 
 void debug_break(void)
 {
-    werase(debug_window);
-
-    wattron(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
-    mvwprintw(debug_window, 0, 0, "%s", "BREAK - c to continue");
-    wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
-
-    wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BLACK));
-    mvwprintw(debug_window, 1, 1, "%s", debug_window_message);
-    wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
-
-    wrefresh(debug_window);
+    debug_is_break = true;
 
     char c = '~';
 
@@ -124,7 +150,7 @@ void debug_break(void)
         c = input_read();
     }
 
-    debug_log("Resumed.");
+    debug_is_break = true;
 }
 
 void gfx_init(void)
@@ -149,7 +175,9 @@ void gfx_init(void)
     init_pair(COLOR_PAIR_BLUE, COLOR_WHITE, COLOR_BLUE);
     init_pair(COLOR_PAIR_YELLOW, COLOR_WHITE, COLOR_YELLOW);
 
+    system("clear");
     wrefresh(main_window);
+    wrefresh(debug_window);
     debug_log("Gfx initialized.");
 }
 

@@ -207,7 +207,7 @@ int main(int argc, char **argv)
     {
         if (app_loop != NULL)
         {
-            app_loop(&platform, app_main_memory);
+            app_loop(&platform, &app_main_memory);
         }
         else
         {
@@ -227,7 +227,7 @@ int main(int argc, char **argv)
         usleep(16000);
     }
 
-    app_exit(&platform, app_main_memory);
+    app_exit(&platform, &app_main_memory);
     memory_release(&app_main_memory);
     audio_deinit();
 

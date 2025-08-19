@@ -6,7 +6,7 @@
 
 typedef struct Thing
 {
-    uint16_t texture_idx;
+    size_t texture_idx;
     int16_t x;
     int16_t y;
 } Thing_t;
@@ -16,18 +16,18 @@ typedef struct AppMemory
     Thing_t things[2];
     uint16_t controlled_thing;
     float audio_samples[2][1024];
-    uint16_t audio_sample_length;
-    uint16_t scratch_size;
-    uint16_t scratch_used;
+    size_t audio_sample_length;
+    size_t scratch_size;
+    size_t scratch_used;
     uint8_t scratch_buff[32768];
 } AppMemory_t;
 
-static uint16_t load_texture_to_scratch(char *name, const Platform_t *platform, AppMemory_t *app_memory)
+static size_t load_texture_to_scratch(char *name, const Platform_t *platform, AppMemory_t *app_memory)
 {
-    uint16_t index = app_memory->scratch_used;
+    size_t index = app_memory->scratch_used;
     TextureRGB_t *texture_ptr = (TextureRGB_t *)(app_memory->scratch_buff+index);
     platform->gfx_load_texture(name, texture_ptr);
-    uint16_t size = sizeof(TextureRGB_t) + (texture_ptr->height * texture_ptr->width * 1);
+    size_t size = sizeof(TextureRGB_t) + (texture_ptr->height * texture_ptr->width * 3);
     app_memory->scratch_used += size;
     return index;
 }
@@ -66,13 +66,13 @@ void app_init(const Platform_t *platform, Memory_t **memory_pptr)
 }
 
 /// must match prototype @ref AppLoopFunc
-void app_loop(const Platform_t *platform, Memory_t *memory)
+void app_loop(const Platform_t *platform, Memory_t **memory_pptr)
 {
     static const int8_t mov_speed = 1;
     
     static char debug_buff[128] = {0};
 
-    AppMemory_t *app_memory = (AppMemory_t *)memory->buffer;
+    AppMemory_t *app_memory = (AppMemory_t *)(*memory_pptr)->buffer;
 
     char input = platform->input_read();
 
@@ -125,6 +125,6 @@ void app_loop(const Platform_t *platform, Memory_t *memory)
 }
 
 /// must match prototype @ref AppExitFunc
-void app_exit(const Platform_t *platform, Memory_t *memory)
+void app_exit(const Platform_t *platform, Memory_t **memory_pptr)
 {
 }

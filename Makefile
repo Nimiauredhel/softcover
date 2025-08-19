@@ -75,4 +75,4 @@ gdb:
 .PHONY: valgrind
 valgrind:
 	cd $(BUILD_DIR)
-	valgrind -s --leak-check=yes --track-origins=yes $(RUN_CMD)
+	valgrind -s --leak-check=yes --track-origins=yes $(RUN_CMD) 2> valgrind_output

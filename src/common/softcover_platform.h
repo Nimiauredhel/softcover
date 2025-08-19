@@ -10,8 +10,8 @@ typedef struct Memory Memory_t;
 typedef struct TextureRGB TextureRGB_t;
 
 typedef void (*AppInitFunc)(const Platform_t *platform, Memory_t **memory_pptr);
-typedef void (*AppLoopFunc)(const Platform_t *platform, Memory_t *memory);
-typedef void (*AppExitFunc)(const Platform_t *platform, Memory_t *memory);
+typedef void (*AppLoopFunc)(const Platform_t *platform, Memory_t **memory_pptr);
+typedef void (*AppExitFunc)(const Platform_t *platform, Memory_t **memory_pptr);
 
 struct Platform
 {
@@ -47,7 +47,7 @@ struct TextureRGB
 {
     uint32_t width;
     uint32_t height;
-    uint8_t *pixels;
+    uint8_t pixels[];
 };
 
 #endif

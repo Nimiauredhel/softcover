@@ -91,7 +91,10 @@ void gfx_load_texture(char *name, TextureRGB_t *dest)
 {
     static char debug_buff[128] = {0};
 
-    uint32_t ret = loadbmp_decode_file(name, &dest->pixels, &dest->width, &dest->height, LOADBMP_RGB);
+    uint8_t *temp_buff = NULL;
+
+    uint32_t ret = loadbmp_decode_file(name, &temp_buff, &dest->width, &dest->height, LOADBMP_RGB);
+    size_t size = dest->width * dest->width * LOADBMP_RGB;
 
     if (ret != 0)
     {
@@ -99,5 +102,11 @@ void gfx_load_texture(char *name, TextureRGB_t *dest)
             ret, name, dest->width, dest->height);
         debug_log(debug_buff);
         debug_break();
+    }
+
+    if (temp_buff != NULL)
+    {
+        memcpy(dest->pixels, temp_buff, size);
+        free(temp_buff);
     }
 }
