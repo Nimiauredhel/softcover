@@ -43,11 +43,11 @@ void app_init(const Platform_t *platform, Memory_t **memory_pptr)
     app_memory->scratch_size = sizeof(app_memory->scratch_buff);
     app_memory->scratch_used = 0;
 
-    app_memory->things[0].texture_idx = load_texture_to_scratch("apple.bmp", platform, app_memory);
+    app_memory->things[0].texture_idx = load_texture_to_scratch("thing1.bmp", platform, app_memory);
     app_memory->things[0].x = 0;
     app_memory->things[0].y = 1;
 
-    app_memory->things[1].texture_idx = load_texture_to_scratch("snake.bmp", platform, app_memory);
+    app_memory->things[1].texture_idx = load_texture_to_scratch("thing2.bmp", platform, app_memory);
     app_memory->things[1].x = 5;
     app_memory->things[1].y = 4;
 

@@ -146,7 +146,7 @@ void gfx_draw_texture(TextureRGB_t *texture, int start_x, int start_y)
             while(final_x >= WINDOW_WIDTH) final_x -= WINDOW_WIDTH;
             while(final_x < 0) final_x += WINDOW_WIDTH;
 
-            uint16_t pixel_idx = texture_x + (texture_y * texture->width);
+            uint16_t pixel_idx = 3 * (texture_x + (texture_y * texture->width));
 
             color = rgb_to_color_pair(texture->pixels[pixel_idx], texture->pixels[pixel_idx+1], texture->pixels[pixel_idx+2]);
             gfx_buffer[final_y][final_x] = color;
