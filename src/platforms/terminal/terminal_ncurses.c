@@ -31,7 +31,6 @@ static WINDOW *audiovis_window = NULL;
 typedef struct DebugRing
 {
     uint8_t head;
-    uint8_t tail;
     uint8_t len;
     char debug_messages[DEBUG_RING_CAPACITY][DEBUG_MESSAGE_MAX_LEN];
 } DebugRing_t;
@@ -41,36 +40,33 @@ static DebugRing_t debug_ring = {0};
 static bool debug_is_break = false;
 
 /// TODO: uhhh make this ... better?
-static uint8_t rgb_to_color_pair(uint8_t *pixel)
+static uint8_t rgb_to_color_pair(uint8_t r, uint8_t g, uint8_t b)
 {
-    uint16_t sum = pixel[0] + pixel[1] + pixel[2];
+    uint16_t sum = r + g + b;
 
     if (sum < 32) return COLOR_PAIR_BG_BLACK;
-    if (sum > 672) return COLOR_PAIR_BG_WHITE;
+    if (sum > 720) return COLOR_PAIR_BG_WHITE;
 
     uint16_t current_score = 0;
     uint16_t high_score = 0; 
     uint8_t winner = 0;
     
-    if (pixel[0] > high_score)
-    {
-        high_score = pixel[0];
-        winner = 1;
-    }
+    high_score = r;
+    winner = 1;
 
-    if (pixel[1] > high_score)
+    if (g > high_score)
     {
-        high_score = pixel[1];
+        high_score = g;
         winner = 2;
     }
 
-    if (pixel[2] > high_score)
+    if (b > high_score)
     {
-        high_score = pixel[2];
+        high_score = b;
         winner = 4;
     }
 
-    current_score = (pixel[0] + pixel[1]) / 2;
+    current_score = (r + g) / 2;
 
     if (current_score > high_score)
     {
@@ -78,7 +74,7 @@ static uint8_t rgb_to_color_pair(uint8_t *pixel)
         winner = 3;
     }
 
-    current_score = (pixel[0] + pixel[2]) / 2;
+    current_score = (r + b) / 2;
 
     if (current_score > high_score)
     {
@@ -86,7 +82,7 @@ static uint8_t rgb_to_color_pair(uint8_t *pixel)
         winner = 5;
     }
 
-    current_score = (pixel[1] + pixel[2]) / 2;
+    current_score = (g + b) / 2;
 
     if (current_score > high_score)
     {
@@ -110,7 +106,7 @@ static void debug_refresh_window(void)
     for (uint8_t i = 0; i < debug_ring.len; i++)
     {
         wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BG_BLACK));
-        mvwprintw(debug_window, i, 10, "%u: %s", i, debug_ring.debug_messages[idx]);
+        mvwprintw(debug_window, i, 8, "[%u]%u: %s", idx, i, debug_ring.debug_messages[idx]);
         wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
 
         idx++;
@@ -122,7 +118,6 @@ static void debug_refresh_window(void)
 
 char input_read(void)
 {
-    //printf("input read:\n");
     char c = wgetch(main_window);
     return c;
 }
@@ -151,7 +146,9 @@ void gfx_draw_texture(TextureRGB_t *texture, int start_x, int start_y)
             while(final_x >= WINDOW_WIDTH) final_x -= WINDOW_WIDTH;
             while(final_x < 0) final_x += WINDOW_WIDTH;
 
-            color = rgb_to_color_pair(texture->pixels+texture_x+(texture->width * texture_y));
+            uint16_t pixel_idx = texture_x + (texture_y * texture->width);
+
+            color = rgb_to_color_pair(texture->pixels[pixel_idx], texture->pixels[pixel_idx+1], texture->pixels[pixel_idx+2]);
             gfx_buffer[final_y][final_x] = color;
         }
     }
@@ -176,24 +173,20 @@ void gfx_sync_buffer(void)
 
 void debug_log(char *message)
 {
-    snprintf(debug_ring.debug_messages[debug_ring.tail], DEBUG_MESSAGE_MAX_LEN, "%s", message);
-    debug_ring.tail++;
-
-    if (debug_ring.tail >= DEBUG_RING_CAPACITY)
-    {
-        debug_ring.tail = 0;
-    }
+    uint8_t idx = debug_ring.head + debug_ring.len % DEBUG_RING_CAPACITY;
+    snprintf(debug_ring.debug_messages[idx], DEBUG_MESSAGE_MAX_LEN, "%s", message);
 
     if (debug_ring.len < DEBUG_RING_CAPACITY)
     {
         debug_ring.len++;
     }
-
-    if (debug_ring.tail == debug_ring.head) debug_ring.head++;
-    if (debug_ring.head >= DEBUG_RING_CAPACITY) debug_ring.head = 0;
+    else
+    {
+        debug_ring.head++;
+        if (debug_ring.head >= DEBUG_RING_CAPACITY) debug_ring.head = 0;
+    }
 
     debug_refresh_window();
-
 }
 
 void debug_break(void)
@@ -289,7 +282,6 @@ void gfx_init(void)
     cbreak();
 
     debug_ring.head = 0;
-    debug_ring.tail = 0;
     debug_ring.len = 0;
 
     main_window = newwin(WINDOW_HEIGHT, WINDOW_WIDTH, 0, 0);
