@@ -229,7 +229,16 @@ int main(int argc, char **argv)
 
     app_exit(&platform, &app_main_memory);
     memory_release(&app_main_memory);
+
+    char c = '~';
+
+    while(c != '\n')
+    {
+        c = input_read();
+    }
+
     audio_deinit();
+    gfx_deinit();
 
     return EXIT_SUCCESS;
 }

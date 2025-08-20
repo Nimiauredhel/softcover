@@ -51,19 +51,19 @@ static void debug_refresh_window(void)
     wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
 
     uint8_t idx = debug_ring.head;
-    uint8_t row = 1;
+    uint8_t row = 0;
 
-    do
+    while(row < 10)
     {
         wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BLACK));
-        mvwprintw(debug_window, row, 1, "%s", debug_ring.debug_messages[idx]);
+        mvwprintw(debug_window, row, 10, "%u: %s", row, debug_ring.debug_messages[idx]);
         wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
 
+        if (idx == debug_ring.tail) break;
         row++;
         idx++;
         if (idx >= DEBUG_RING_CAPACITY) idx = 0;
-    }
-    while(idx != debug_ring.tail);
+    };
 
     wrefresh(debug_window);
 }
@@ -142,10 +142,11 @@ void debug_log(char *message)
 void debug_break(void)
 {
     debug_is_break = true;
+    debug_refresh_window();
 
     char c = '~';
 
-    while(c != 'c' && !should_terminate)
+    while(c != '\n' && !should_terminate)
     {
         c = input_read();
     }
