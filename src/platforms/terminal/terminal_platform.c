@@ -230,6 +230,8 @@ int main(int argc, char **argv)
     app_exit(&platform, &app_main_memory);
     memory_release(&app_main_memory);
 
+    debug_log("Program halted, press ENTER to quit.");
+
     char c = '~';
 
     while(c != '\n')

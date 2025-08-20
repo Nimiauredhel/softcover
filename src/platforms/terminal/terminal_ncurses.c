@@ -20,6 +20,7 @@ typedef struct DebugRing
 {
     uint8_t head;
     uint8_t tail;
+    uint8_t len;
     char debug_messages[DEBUG_RING_CAPACITY][DEBUG_MESSAGE_MAX_LEN];
 } DebugRing_t;
 
@@ -51,19 +52,16 @@ static void debug_refresh_window(void)
     wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
 
     uint8_t idx = debug_ring.head;
-    uint8_t row = 0;
 
-    while(row < 10)
+    for (uint8_t i = 0; i < debug_ring.len; i++)
     {
         wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BLACK));
-        mvwprintw(debug_window, row, 10, "%u: %s", row, debug_ring.debug_messages[idx]);
+        mvwprintw(debug_window, i, 10, "%u: %s", i, debug_ring.debug_messages[idx]);
         wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
 
-        if (idx == debug_ring.tail) break;
-        row++;
         idx++;
         if (idx >= DEBUG_RING_CAPACITY) idx = 0;
-    };
+    }
 
     wrefresh(debug_window);
 }
@@ -101,9 +99,6 @@ void gfx_draw_texture(TextureRGB_t *texture, int start_x, int start_y)
             while(final_x >= WINDOW_WIDTH) final_x -= WINDOW_WIDTH;
             while(final_x < 0) final_x += WINDOW_WIDTH;
 
-            snprintf(debug_buff, sizeof(debug_buff), "Writing to gfx buffer %p at [%d,%d] from texture %p at [%d,%d]",
-                    (void *)gfx_buffer, final_x, final_y, (void *)texture->pixels, texture_x, texture_y);
-            debug_log(debug_buff);
             color = rgb_to_color_pair(texture->pixels+texture_x+(texture->width * texture_y));
             gfx_buffer[final_y][final_x] = color;
         }
@@ -131,7 +126,17 @@ void debug_log(char *message)
 {
     snprintf(debug_ring.debug_messages[debug_ring.tail], DEBUG_MESSAGE_MAX_LEN, "%s", message);
     debug_ring.tail++;
-    if (debug_ring.tail >= DEBUG_RING_CAPACITY) debug_ring.tail = 0;
+
+    if (debug_ring.tail >= DEBUG_RING_CAPACITY)
+    {
+        debug_ring.tail = 0;
+    }
+
+    if (debug_ring.len < DEBUG_RING_CAPACITY)
+    {
+        debug_ring.len++;
+    }
+
     if (debug_ring.tail == debug_ring.head) debug_ring.head++;
     if (debug_ring.head >= DEBUG_RING_CAPACITY) debug_ring.head = 0;
 
@@ -160,6 +165,10 @@ void gfx_init(void)
 
     noecho();
     cbreak();
+
+    debug_ring.head = 0;
+    debug_ring.tail = 0;
+    debug_ring.len = 0;
 
     main_window = newwin(WINDOW_HEIGHT, WINDOW_WIDTH, 0, 0);
     debug_window = newwin(DEBUG_WINDOW_HEIGHT, DEBUG_WINDOW_WIDTH, WINDOW_HEIGHT, 0);
