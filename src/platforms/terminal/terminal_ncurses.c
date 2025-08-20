@@ -7,6 +7,15 @@ static WINDOW *main_window = NULL;
 static WINDOW *debug_window = NULL;
 static WINDOW *audiovis_window = NULL;
 
+#define WINDOW_HEIGHT (24)
+#define WINDOW_WIDTH (96)
+
+#define DEBUG_WINDOW_HEIGHT (24)
+#define DEBUG_WINDOW_WIDTH (128)
+
+#define AUDIOVIS_WINDOW_HEIGHT (32)
+#define AUDIOVIS_WINDOW_WIDTH (64)
+
 #define COLOR_PAIR_BG_BLACK (0)
 #define COLOR_PAIR_BG_RED (1)
 #define COLOR_PAIR_BG_GREEN (2)
@@ -204,38 +213,69 @@ void debug_break(void)
 
 void gfx_audio_vis(const AudioBuffer_t *audio_buffer)
 {
-    static const int8_t mid_row = AUDIOVIS_WINDOW_HEIGHT/2;
-    
-    float last_value = 0.0f;
+    static const int mid_row = AUDIOVIS_WINDOW_HEIGHT/4;
 
     werase(audiovis_window);
 
-    for (uint16_t i = 0; i < audio_buffer->length; i++)
+    uint16_t frames_per_column = (AUDIO_PLATFORM_BUFFER_LENGTH / 2) / AUDIOVIS_WINDOW_WIDTH;
+    bool silence = false;
+
+    for (uint16_t i = 0; i < AUDIOVIS_WINDOW_WIDTH; i++)
     {
-        if (i >= AUDIOVIS_WINDOW_WIDTH) break;
+        float frame_sums_stereo[2] = { 0.0f, 0.0f };
 
-        uint16_t idx = (audio_buffer->head + i) % AUDIO_USER_BUFFER_LENGTH;
-
-        float value = audio_buffer->buffer[idx];
-        //float difference = (value - last_value)/2.0f;
-        last_value = value;
-        int8_t dir = value > 0.0f ? -1 : 1;
-        
-        uint8_t max_val_abs = (uint8_t)(((float)mid_row)*value);
-        int color_pair = value > 0 ? COLOR_PAIR_BG_GREEN : COLOR_PAIR_BG_RED;
-
-        wattron(audiovis_window, COLOR_PAIR(COLOR_PAIR_BG_BLUE));
-        mvwaddch(audiovis_window, mid_row, i, ' ');
-        wattroff(audiovis_window, COLOR_PAIR(COLOR_PAIR_BG_BLUE));
-
-        wattron(audiovis_window, COLOR_PAIR(color_pair));
-
-        for (int j = 1; j <= max_val_abs; j++)
+        for (uint16_t j = 0; j < frames_per_column; j++)
         {
-            mvwaddch(audiovis_window, mid_row+(j*dir), i, ' ');
+            uint16_t idx = (audio_buffer->head + (i * frames_per_column) + j);
+
+            if (idx >= AUDIO_PLATFORM_BUFFER_LENGTH) idx -= AUDIO_PLATFORM_BUFFER_LENGTH;
+
+            int mid_color = idx == audio_buffer->head ? COLOR_PAIR_BG_CYAN : COLOR_PAIR_BG_BLUE;
+
+            wattron(audiovis_window, COLOR_PAIR(mid_color));
+            mvwaddch(audiovis_window, mid_row, i, ' ');
+            mvwaddch(audiovis_window, mid_row*3, i, ' ');
+            wattroff(audiovis_window, COLOR_PAIR(mid_color));
+
+            if (idx == audio_buffer->tail)
+            {
+                silence = true;
+                break;
+            }
+
+            if (idx % 2 == 0)
+            {
+                frame_sums_stereo[0] += audio_buffer->buffer[idx];
+            }
+            else
+            {
+                frame_sums_stereo[1] += audio_buffer->buffer[idx];
+            }
         }
 
-        wattroff(audiovis_window, COLOR_PAIR(color_pair));
+        if (silence)
+        {
+            continue;
+        }
+
+        for (int8_t j = 0; j < 2; j++)
+        {
+            float value = frame_sums_stereo[j] / (frames_per_column * 0.5f);
+            float dir = value > 0.0f ? 1.0f : -1.0f;
+            
+            int max_val_abs = mid_row * value * dir;
+            int color_pair = value > 0.0f ? COLOR_PAIR_BG_GREEN : COLOR_PAIR_BG_RED;
+
+            wattron(audiovis_window, COLOR_PAIR(color_pair));
+
+            for (int k = 1; k <= max_val_abs; k++)
+            {
+                mvwaddch(audiovis_window, (mid_row * (1 + (2*j)))+(k*dir*-1), i, ' ');
+            }
+
+            wattroff(audiovis_window, COLOR_PAIR(color_pair));
+        }
+
     }
 
     wrefresh(audiovis_window);

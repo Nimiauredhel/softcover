@@ -6,15 +6,6 @@
 #include "softcover_platform.h"
 #include "terminal_portaudio.h"
 
-#define WINDOW_HEIGHT (24)
-#define WINDOW_WIDTH (96)
-
-#define DEBUG_WINDOW_HEIGHT (24)
-#define DEBUG_WINDOW_WIDTH (96)
-
-#define AUDIOVIS_WINDOW_HEIGHT (32)
-#define AUDIOVIS_WINDOW_WIDTH (64)
-
 char input_read(void);
 void gfx_clear_buffer(void);
 void gfx_draw_texture(TextureRGB_t *texture, int x, int y);

@@ -4,14 +4,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define AUDIO_USER_BUFFER_LENGTH (4096)
+#define AUDIO_PLATFORM_BUFFER_LENGTH (4096)
 
 typedef struct AudioBuffer
 {
     uint16_t length;
     uint16_t head;
     uint16_t tail;
-    float buffer[AUDIO_USER_BUFFER_LENGTH];
+    float buffer[AUDIO_PLATFORM_BUFFER_LENGTH];
 } AudioBuffer_t;
 
 const AudioBuffer_t* audio_get_buffer_readonly(void);

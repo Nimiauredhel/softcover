@@ -86,7 +86,7 @@ void audio_init(void)
 
     audio_user_buffer.head = 0;
     audio_user_buffer.tail = 0;
-    audio_user_buffer.length = AUDIO_USER_BUFFER_LENGTH;
+    audio_user_buffer.length = AUDIO_PLATFORM_BUFFER_LENGTH;
 
     PaStreamParameters output_parameters = {0};
     output_parameters.device = Pa_GetDefaultOutputDevice(); /* default input device */
