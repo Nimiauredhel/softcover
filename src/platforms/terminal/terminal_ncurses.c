@@ -7,12 +7,14 @@ static WINDOW *main_window = NULL;
 static WINDOW *debug_window = NULL;
 static WINDOW *audiovis_window = NULL;
 
-#define COLOR_PAIR_BLACK (1)
-#define COLOR_PAIR_WHITE (2)
-#define COLOR_PAIR_RED (3)
-#define COLOR_PAIR_GREEN (4)
-#define COLOR_PAIR_BLUE (5)
-#define COLOR_PAIR_YELLOW (6)
+#define COLOR_PAIR_BG_BLACK (0)
+#define COLOR_PAIR_BG_RED (1)
+#define COLOR_PAIR_BG_GREEN (2)
+#define COLOR_PAIR_BG_YELLOW (3)
+#define COLOR_PAIR_BG_BLUE (4)
+#define COLOR_PAIR_BG_MAGENTA (5)
+#define COLOR_PAIR_BG_CYAN (6)
+#define COLOR_PAIR_BG_WHITE (7)
 
 #define DEBUG_RING_CAPACITY (10)
 #define DEBUG_MESSAGE_MAX_LEN (128)
@@ -25,7 +27,7 @@ typedef struct DebugRing
     char debug_messages[DEBUG_RING_CAPACITY][DEBUG_MESSAGE_MAX_LEN];
 } DebugRing_t;
 
-static uint8_t gfx_buffer[WINDOW_HEIGHT][WINDOW_WIDTH] = { { COLOR_PAIR_YELLOW } };
+static uint8_t gfx_buffer[WINDOW_HEIGHT][WINDOW_WIDTH] = { { COLOR_PAIR_BG_YELLOW } };
 static DebugRing_t debug_ring = {0};
 static bool debug_is_break = false;
 
@@ -34,31 +36,73 @@ static uint8_t rgb_to_color_pair(uint8_t *pixel)
 {
     uint16_t sum = pixel[0] + pixel[1] + pixel[2];
 
-    if (sum < 64) return COLOR_PAIR_BLACK;
-    if (sum > 640) return COLOR_PAIR_WHITE;
+    if (sum < 32) return COLOR_PAIR_BG_BLACK;
+    if (sum > 672) return COLOR_PAIR_BG_WHITE;
 
-    if (pixel[0] > pixel[1] + pixel[2]) return COLOR_PAIR_RED;
-    if (pixel[1] > pixel[0] + pixel[2]) return COLOR_PAIR_GREEN;
-    if (pixel[2] > pixel[0] + pixel[1]) return COLOR_PAIR_BLUE;
+    uint16_t current_score = 0;
+    uint16_t high_score = 0; 
+    uint8_t winner = 0;
+    
+    if (pixel[0] > high_score)
+    {
+        high_score = pixel[0];
+        winner = 1;
+    }
 
-    return COLOR_PAIR_YELLOW;
+    if (pixel[1] > high_score)
+    {
+        high_score = pixel[1];
+        winner = 2;
+    }
+
+    if (pixel[2] > high_score)
+    {
+        high_score = pixel[2];
+        winner = 4;
+    }
+
+    current_score = (pixel[0] + pixel[1]) / 2;
+
+    if (current_score > high_score)
+    {
+        high_score = current_score;
+        winner = 3;
+    }
+
+    current_score = (pixel[0] + pixel[2]) / 2;
+
+    if (current_score > high_score)
+    {
+        high_score = current_score;
+        winner = 5;
+    }
+
+    current_score = (pixel[1] + pixel[2]) / 2;
+
+    if (current_score > high_score)
+    {
+        //high_score = pixel[1] + pixel[2];
+        winner = 6;
+    }
+
+    return winner;
 }
 
 static void debug_refresh_window(void)
 {
     werase(debug_window);
 
-    wattron(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
+    wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
     mvwprintw(debug_window, 0, 0, "%s", debug_is_break ? "BREAK - c to continue" : "DEBUG");
-    wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
+    wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
 
     uint8_t idx = debug_ring.head;
 
     for (uint8_t i = 0; i < debug_ring.len; i++)
     {
-        wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BLACK));
+        wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BG_BLACK));
         mvwprintw(debug_window, i, 10, "%u: %s", i, debug_ring.debug_messages[idx]);
-        wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_RED));
+        wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
 
         idx++;
         if (idx >= DEBUG_RING_CAPACITY) idx = 0;
@@ -76,12 +120,12 @@ char input_read(void)
 
 void gfx_clear_buffer(void)
 {
-    memset(gfx_buffer, COLOR_PAIR_BLACK, sizeof(gfx_buffer));
+    memset(gfx_buffer, COLOR_PAIR_BG_BLACK, sizeof(gfx_buffer));
 }
 
 void gfx_draw_texture(TextureRGB_t *texture, int start_x, int start_y)
 {
-    uint8_t color = COLOR_PAIR_BLACK;
+    uint8_t color = COLOR_PAIR_BG_BLACK;
 
     int final_x;
     int final_y;
@@ -178,11 +222,11 @@ void gfx_audio_vis(const AudioBuffer_t *audio_buffer)
         int8_t dir = value > 0.0f ? -1 : 1;
         
         uint8_t max_val_abs = (uint8_t)(((float)mid_row)*value);
-        int color_pair = value > 0 ? COLOR_PAIR_GREEN : COLOR_PAIR_RED;
+        int color_pair = value > 0 ? COLOR_PAIR_BG_GREEN : COLOR_PAIR_BG_RED;
 
-        wattron(audiovis_window, COLOR_PAIR(COLOR_PAIR_BLUE));
+        wattron(audiovis_window, COLOR_PAIR(COLOR_PAIR_BG_BLUE));
         mvwaddch(audiovis_window, mid_row, i, ' ');
-        wattroff(audiovis_window, COLOR_PAIR(COLOR_PAIR_BLUE));
+        wattroff(audiovis_window, COLOR_PAIR(COLOR_PAIR_BG_BLUE));
 
         wattron(audiovis_window, COLOR_PAIR(color_pair));
 
@@ -217,17 +261,21 @@ void gfx_init(void)
 
     start_color();
 
-    init_pair(COLOR_PAIR_BLACK, COLOR_WHITE, COLOR_BLACK);
-    init_pair(COLOR_PAIR_WHITE, COLOR_WHITE, COLOR_WHITE);
-    init_pair(COLOR_PAIR_RED, COLOR_WHITE, COLOR_RED);
-    init_pair(COLOR_PAIR_GREEN, COLOR_WHITE, COLOR_GREEN);
-    init_pair(COLOR_PAIR_BLUE, COLOR_WHITE, COLOR_BLUE);
-    init_pair(COLOR_PAIR_YELLOW, COLOR_WHITE, COLOR_YELLOW);
+    init_pair(COLOR_PAIR_BG_BLACK, COLOR_WHITE, COLOR_BLACK);
+    init_pair(COLOR_PAIR_BG_RED, COLOR_WHITE, COLOR_RED);
+    init_pair(COLOR_PAIR_BG_GREEN, COLOR_WHITE, COLOR_GREEN);
+    init_pair(COLOR_PAIR_BG_YELLOW, COLOR_WHITE, COLOR_YELLOW);
+    init_pair(COLOR_PAIR_BG_MAGENTA, COLOR_WHITE, COLOR_YELLOW);
+    init_pair(COLOR_PAIR_BG_CYAN, COLOR_WHITE, COLOR_YELLOW);
+    init_pair(COLOR_PAIR_BG_BLUE, COLOR_WHITE, COLOR_BLUE);
+    init_pair(COLOR_PAIR_BG_WHITE, COLOR_WHITE, COLOR_WHITE);
 
     system("clear");
+
     wrefresh(main_window);
     wrefresh(debug_window);
     wrefresh(audiovis_window);
+
     debug_log("Gfx initialized.");
 }
 
