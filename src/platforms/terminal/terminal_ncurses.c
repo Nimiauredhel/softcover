@@ -68,7 +68,7 @@ static uint8_t rgb_to_color_pair(uint8_t r, uint8_t g, uint8_t b)
 
     current_score = (r + g) / 2;
 
-    if (current_score > high_score)
+    if (current_score >= high_score)
     {
         high_score = current_score;
         winner = 3;
@@ -76,7 +76,7 @@ static uint8_t rgb_to_color_pair(uint8_t r, uint8_t g, uint8_t b)
 
     current_score = (r + b) / 2;
 
-    if (current_score > high_score)
+    if (current_score >= high_score)
     {
         high_score = current_score;
         winner = 5;
@@ -84,7 +84,7 @@ static uint8_t rgb_to_color_pair(uint8_t r, uint8_t g, uint8_t b)
 
     current_score = (g + b) / 2;
 
-    if (current_score > high_score)
+    if (current_score >= high_score)
     {
         //high_score = pixel[1] + pixel[2];
         winner = 6;
