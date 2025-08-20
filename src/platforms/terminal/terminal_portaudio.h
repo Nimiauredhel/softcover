@@ -14,6 +14,7 @@ typedef struct AudioBuffer
     float buffer[AUDIO_USER_BUFFER_LENGTH];
 } AudioBuffer_t;
 
+const AudioBuffer_t* audio_get_buffer_readonly(void);
 void audio_play_chunk(float *chunk, uint16_t len);
 void audio_init(void);
 void audio_deinit(void);

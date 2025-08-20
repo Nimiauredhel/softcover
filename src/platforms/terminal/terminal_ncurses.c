@@ -5,6 +5,7 @@
 
 static WINDOW *main_window = NULL;
 static WINDOW *debug_window = NULL;
+static WINDOW *audiovis_window = NULL;
 
 #define COLOR_PAIR_BLACK (1)
 #define COLOR_PAIR_WHITE (2)
@@ -80,8 +81,6 @@ void gfx_clear_buffer(void)
 
 void gfx_draw_texture(TextureRGB_t *texture, int start_x, int start_y)
 {
-    static char debug_buff[128] = {0};
-
     uint8_t color = COLOR_PAIR_BLACK;
 
     int final_x;
@@ -159,6 +158,45 @@ void debug_break(void)
     debug_is_break = true;
 }
 
+void gfx_audio_vis(const AudioBuffer_t *audio_buffer)
+{
+    static const int8_t mid_row = AUDIOVIS_WINDOW_HEIGHT/2;
+    
+    float last_value = 0.0f;
+
+    werase(audiovis_window);
+
+    for (uint16_t i = 0; i < audio_buffer->length; i++)
+    {
+        if (i >= AUDIOVIS_WINDOW_WIDTH) break;
+
+        uint16_t idx = (audio_buffer->head + i) % AUDIO_USER_BUFFER_LENGTH;
+
+        float value = audio_buffer->buffer[idx];
+        //float difference = (value - last_value)/2.0f;
+        last_value = value;
+        int8_t dir = value > 0.0f ? -1 : 1;
+        
+        uint8_t max_val_abs = (uint8_t)(((float)mid_row)*value);
+        int color_pair = value > 0 ? COLOR_PAIR_GREEN : COLOR_PAIR_RED;
+
+        wattron(audiovis_window, COLOR_PAIR(COLOR_PAIR_BLUE));
+        mvwaddch(audiovis_window, mid_row, i, ' ');
+        wattroff(audiovis_window, COLOR_PAIR(COLOR_PAIR_BLUE));
+
+        wattron(audiovis_window, COLOR_PAIR(color_pair));
+
+        for (int j = 1; j <= max_val_abs; j++)
+        {
+            mvwaddch(audiovis_window, mid_row+(j*dir), i, ' ');
+        }
+
+        wattroff(audiovis_window, COLOR_PAIR(color_pair));
+    }
+
+    wrefresh(audiovis_window);
+}
+
 void gfx_init(void)
 {
     initscr();
@@ -172,6 +210,7 @@ void gfx_init(void)
 
     main_window = newwin(WINDOW_HEIGHT, WINDOW_WIDTH, 0, 0);
     debug_window = newwin(DEBUG_WINDOW_HEIGHT, DEBUG_WINDOW_WIDTH, WINDOW_HEIGHT, 0);
+    audiovis_window = newwin(AUDIOVIS_WINDOW_HEIGHT, AUDIOVIS_WINDOW_WIDTH, 0, WINDOW_WIDTH);
 
     nodelay(main_window, true);
     nodelay(debug_window, true);
@@ -188,6 +227,7 @@ void gfx_init(void)
     system("clear");
     wrefresh(main_window);
     wrefresh(debug_window);
+    wrefresh(audiovis_window);
     debug_log("Gfx initialized.");
 }
 

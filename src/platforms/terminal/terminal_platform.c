@@ -214,6 +214,7 @@ int main(int argc, char **argv)
         }
 
         gfx_sync_buffer();
+        gfx_audio_vis(audio_get_buffer_readonly());
 
         stat(lib_path, &file_stat);
         lib_modified_time = file_stat.st_mtime;

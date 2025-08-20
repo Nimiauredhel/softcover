@@ -51,6 +51,11 @@ static void set_audio(PaStream *stream, bool active)
     }
 }
 
+const AudioBuffer_t* audio_get_buffer_readonly(void)
+{
+    return (const AudioBuffer_t*)&audio_user_buffer;
+}
+
 void audio_play_chunk(float *chunk, uint16_t len)
 {
     for (int i = 0; i < len; i++)
