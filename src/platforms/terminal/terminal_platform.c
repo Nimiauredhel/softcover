@@ -23,8 +23,47 @@ void storage_load_state(char *state_name);
 bool get_should_terminate(void);
 void set_should_terminate(bool value);
 
+static const char *state_filename_format = "%.state";
+
+static char lib_path[256] = LIB_NAME;
+
+static time_t lib_load_time = {0};
+static time_t lib_modified_time = {0};
+
+static const char *app_setup_name = "app_setup";
+static const char *app_init_name = "app_init";
+static const char *app_loop_name = "app_loop";
+static const char *app_exit_name = "app_exit";
+
+static AppSetupFunc app_setup;
+static AppInitFunc app_init;
+static AppLoopFunc app_loop;
+static AppExitFunc app_exit;
+
+static void *lib_handle = NULL;
+static void (*func_handle)(void) = NULL;
+
+static Memory_t *app_main_memory = NULL;
+
+static const PlatformCapabilities_t capabilities =
+{
+    .app_memory_limit_bytes = 128*1024,
+    .gfx_frame_time_min_us = 8000,
+};
+
+static const PlatformSettings_t default_settings =
+{
+    .app_memory_required_bytes = capabilities.app_memory_limit_bytes,
+    .gfx_frame_time_target_us = capabilities.gfx_frame_time_min_us,
+};
+
+static PlatformSettings_t platform_settings = default_settings;
+
 static const Platform_t platform =
 {
+    .capabilities = &capabilities,
+    .settings = &platform_settings,
+
     .memory_allocate = memory_allocate,
     .memory_release = memory_release,
 
@@ -45,31 +84,19 @@ static const Platform_t platform =
     .debug_break = debug_break,
 };
 
-static const char *app_init_name = "app_init";
-static const char *app_loop_name = "app_loop";
-static const char *app_exit_name = "app_exit";
-
-static const char *state_filename_format = "%.state";
-
-static char lib_path[256] = LIB_NAME;
-
-static time_t lib_load_time = {0};
-static time_t lib_modified_time = {0};
-
-static void *lib_handle = NULL;
-static void (*func_handle)(void) = NULL;
-
-static AppInitFunc app_init;
-static AppLoopFunc app_loop;
-static AppExitFunc app_exit;
-
-static Memory_t *app_main_memory = NULL;
-
 Memory_t* memory_allocate(size_t size)
 {
     Memory_t *memory = (Memory_t *)malloc(size + sizeof(Memory_t));
+
+    if (memory == NULL)
+    {
+        should_terminate = true;
+        debug_log("Failed to allocate main memory.");
+        return NULL;
+    }
+
     explicit_bzero(memory->buffer, size);
-    memory->size = size;
+    memory->size_bytes = size;
     return memory;
 }
 
@@ -98,7 +125,7 @@ void storage_save_state(char *state_name)
         return;
     }
     
-    fwrite(app_main_memory->buffer, 1, app_main_memory->size, file);
+    fwrite(app_main_memory->buffer, 1, app_main_memory->size_bytes, file);
     fclose(file);
 }
 
@@ -122,7 +149,7 @@ void storage_load_state(char *state_name)
     fseek(file, 0, SEEK_END);
     file_size = ftell(file);
 
-    if (file_size != app_main_memory->size)
+    if (file_size != app_main_memory->size_bytes)
     {
         memory_release(&app_main_memory);
         app_main_memory = memory_allocate(file_size);
@@ -146,11 +173,11 @@ void set_should_terminate(bool value)
 
 static void load_app(void)
 {
-    //printf("Loading dynamic library.\n");
+    debug_log("Loading app layer.\n");
 
     if (lib_handle != NULL)
     {
-        //printf("Closing previously loaded handle.\n");
+        debug_log("Closing previously loaded handle.\n");
         dlclose(lib_handle);
         lib_handle = NULL;
         func_handle = NULL;
@@ -161,12 +188,15 @@ static void load_app(void)
     if (lib_handle == NULL )
     {
         //printf("Failed to load [%s]: %s\n", lib_path, dlerror());
-        exit(EXIT_FAILURE);
+        debug_log("Failed to load app layer.");
+        should_terminate = true;
+        return;
     }
 
-    app_init = dlsym(lib_handle, app_init_name);
-    app_loop = dlsym(lib_handle, app_loop_name);
-    app_exit = dlsym(lib_handle, app_exit_name);
+    app_setup = (AppSetupFunc)dlsym(lib_handle, app_setup_name);
+    app_init = (AppInitFunc)dlsym(lib_handle, app_init_name);
+    app_loop = (AppLoopFunc)dlsym(lib_handle, app_loop_name);
+    app_exit = (AppExitFunc)dlsym(lib_handle, app_exit_name);
 
     struct stat lib_stat = {0};
     stat(lib_path, &lib_stat);
@@ -175,6 +205,8 @@ static void load_app(void)
 
 int main(int argc, char **argv)
 {
+#define TERMINATION_POINT if (should_terminate) goto platform_termination
+
     static struct stat file_stat = {0};
 
     printf("Program started.\n");
@@ -192,12 +224,23 @@ int main(int argc, char **argv)
     }
 
     load_app();
+    TERMINATION_POINT;
+
+    /// calling the app layer's setup function to establish platform settings and requirements.
+    app_setup(&platform);
+    TERMINATION_POINT;
+
+    /// initializing platform modules according to given settings
+    /// TODO: use given settings
     audio_init();
     gfx_init();
 
+    app_main_memory = memory_allocate(platform_settings.app_memory_required_bytes);
+    TERMINATION_POINT;
+
     if (app_init != NULL)
     {
-        app_init(&platform, &app_main_memory);
+        app_init(&platform, app_main_memory);
     }
     else
     {
@@ -207,7 +250,7 @@ int main(int argc, char **argv)
     {
         if (app_loop != NULL)
         {
-            app_loop(&platform, &app_main_memory);
+            app_loop(&platform, app_main_memory);
         }
         else
         {
@@ -228,17 +271,13 @@ int main(int argc, char **argv)
         usleep(16000);
     }
 
-    app_exit(&platform, &app_main_memory);
+platform_termination:
+
+    if (app_exit != NULL) app_exit(&platform, app_main_memory);
     memory_release(&app_main_memory);
 
     debug_log("Program halted, press ENTER to quit.");
-
-    char c = '~';
-
-    while(c != '\n')
-    {
-        c = input_read();
-    }
+    debug_break();
 
     audio_deinit();
     gfx_deinit();

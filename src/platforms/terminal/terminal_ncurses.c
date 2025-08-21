@@ -35,11 +35,16 @@ typedef struct DebugRing
     char debug_messages[DEBUG_RING_CAPACITY][DEBUG_MESSAGE_MAX_LEN];
 } DebugRing_t;
 
-static uint8_t gfx_buffer[WINDOW_HEIGHT][WINDOW_WIDTH] = { { COLOR_PAIR_BG_YELLOW } };
-static DebugRing_t debug_ring = {0};
-static bool debug_is_break = false;
+static bool ncurses_is_initialized = false;
+static uint8_t ncurses_buffer[WINDOW_HEIGHT][WINDOW_WIDTH] = { { COLOR_PAIR_BG_YELLOW } };
 
-/// TODO: uhhh make this ... better?
+static bool debug_is_break = false;
+static DebugRing_t debug_ring = {0};
+
+/**
+ * @brief Inefficiently translates a given RGB color to an approximate ncurses color pair.
+ * Likely has room for improvement, but also extremely low priority.
+ */
 static uint8_t rgb_to_color_pair(uint8_t r, uint8_t g, uint8_t b)
 {
     uint16_t sum = r + g + b;
@@ -124,10 +129,10 @@ char input_read(void)
 
 void gfx_clear_buffer(void)
 {
-    memset(gfx_buffer, COLOR_PAIR_BG_BLACK, sizeof(gfx_buffer));
+    memset(ncurses_buffer, COLOR_PAIR_BG_BLACK, sizeof(ncurses_buffer));
 }
 
-void gfx_draw_texture(TextureRGB_t *texture, int start_x, int start_y)
+void gfx_draw_texture(Texture_t *texture, int start_x, int start_y)
 {
     uint8_t color = COLOR_PAIR_BG_BLACK;
 
@@ -146,10 +151,10 @@ void gfx_draw_texture(TextureRGB_t *texture, int start_x, int start_y)
             while(final_x >= WINDOW_WIDTH) final_x -= WINDOW_WIDTH;
             while(final_x < 0) final_x += WINDOW_WIDTH;
 
-            uint16_t pixel_idx = 3 * (texture_x + (texture_y * texture->width));
+            uint16_t pixel_idx = texture->pixel_size_bytes * (texture_x + (texture_y * texture->width));
 
             color = rgb_to_color_pair(texture->pixels[pixel_idx], texture->pixels[pixel_idx+1], texture->pixels[pixel_idx+2]);
-            gfx_buffer[final_y][final_x] = color;
+            ncurses_buffer[final_y][final_x] = color;
         }
     }
 }
@@ -162,9 +167,9 @@ void gfx_sync_buffer(void)
     {
         for(int x = 0; x < WINDOW_WIDTH; x++)
         {
-            wattron(main_window, COLOR_PAIR(gfx_buffer[y][x]));
+            wattron(main_window, COLOR_PAIR(ncurses_buffer[y][x]));
             mvwaddch(main_window, y, x, ' ');
-            wattroff(main_window, COLOR_PAIR(gfx_buffer[y][x]));
+            wattroff(main_window, COLOR_PAIR(ncurses_buffer[y][x]));
         }
     }
 
@@ -186,22 +191,32 @@ void debug_log(char *message)
         if (debug_ring.head >= DEBUG_RING_CAPACITY) debug_ring.head = 0;
     }
 
-    debug_refresh_window();
+    if (ncurses_is_initialized)
+    {
+        debug_refresh_window();
+    }
+    else
+    {
+        printf("DEBUG: %s\n", message);
+    }
 }
 
 void debug_break(void)
 {
-    debug_is_break = true;
-    debug_refresh_window();
+    if (ncurses_is_initialized)
+    {
+        debug_is_break = true;
+        debug_refresh_window();
+    }
 
     char c = '~';
 
-    while(c != '\n' && !should_terminate)
+    while(c != '\n')
     {
-        c = input_read();
+        c = ncurses_is_initialized ? input_read() : fgetc(stdin);
     }
 
-    debug_is_break = true;
+    debug_is_break = false;
 }
 
 void gfx_audio_vis(const AudioBuffer_t *audio_buffer)
@@ -274,15 +289,18 @@ void gfx_audio_vis(const AudioBuffer_t *audio_buffer)
     wrefresh(audiovis_window);
 }
 
+void debug_init(void)
+{
+    debug_ring.head = 0;
+    debug_ring.len = 0;
+}
+
 void gfx_init(void)
 {
     initscr();
 
     noecho();
     cbreak();
-
-    debug_ring.head = 0;
-    debug_ring.len = 0;
 
     main_window = newwin(WINDOW_HEIGHT, WINDOW_WIDTH, 0, 0);
     debug_window = newwin(DEBUG_WINDOW_HEIGHT, DEBUG_WINDOW_WIDTH, WINDOW_HEIGHT, 0);
@@ -308,6 +326,7 @@ void gfx_init(void)
     wrefresh(debug_window);
     wrefresh(audiovis_window);
 
+    ncurses_is_initialized = true;
     debug_log("Gfx initialized.");
 }
 
@@ -320,4 +339,6 @@ void gfx_deinit(void)
     }
 
     endwin();
+
+    ncurses_is_initialized = false;
 }

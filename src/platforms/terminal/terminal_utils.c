@@ -87,19 +87,20 @@ float seconds_since_clock(struct timespec *start_clock)
     return elapsed_float;
 }
 
-void gfx_load_texture(char *name, TextureRGB_t *dest)
+void gfx_load_texture(char *name, Texture_t *dest)
 {
     static char debug_buff[128] = {0};
 
     uint8_t *temp_buff = NULL;
 
     uint32_t ret = loadbmp_decode_file(name, &temp_buff, &dest->width, &dest->height, LOADBMP_RGB);
-    size_t size = dest->width * dest->width * LOADBMP_RGB;
+    dest->pixel_size_bytes = 3;
+    size_t size = dest->width * dest->width * dest->pixel_size_bytes;
 
     if (ret != 0)
     {
-        snprintf(debug_buff, sizeof(debug_buff), "Error code %d while loading %s (%dx%d).",
-            ret, name, dest->width, dest->height);
+        snprintf(debug_buff, sizeof(debug_buff), "Error code %d while loading %s (%dx%dx%d).",
+            ret, name, dest->width, dest->height, dest->pixel_size_bytes);
         debug_log(debug_buff);
         debug_break();
     }

@@ -6,22 +6,42 @@
 #include <stdbool.h>
 
 typedef struct Platform Platform_t;
-typedef struct Memory Memory_t;
-typedef struct TextureRGB TextureRGB_t;
+typedef struct PlatformCapabilities PlatformCapabilities_t;
+typedef struct PlatformSettings PlatformSettings_t;
 
-typedef void (*AppInitFunc)(const Platform_t *platform, Memory_t **memory_pptr);
-typedef void (*AppLoopFunc)(const Platform_t *platform, Memory_t **memory_pptr);
-typedef void (*AppExitFunc)(const Platform_t *platform, Memory_t **memory_pptr);
+typedef struct Memory Memory_t;
+
+typedef struct Texture Texture_t;
+
+typedef void (*AppSetupFunc)(const Platform_t *platform);
+typedef void (*AppInitFunc)(const Platform_t *platform, Memory_t *memory);
+typedef void (*AppLoopFunc)(const Platform_t *platform, Memory_t *memory);
+typedef void (*AppExitFunc)(const Platform_t *platform, Memory_t *memory);
+
+struct PlatformCapabilities
+{
+    size_t app_memory_limit_bytes;
+    useconds_t gfx_frame_time_min_us;
+};
+
+struct PlatformSettings
+{
+    size_t app_memory_required_bytes;
+    useconds_t gfx_frame_time_target_us;
+};
 
 struct Platform
 {
+    // configuration
+    const PlatformCapabilities_t *capabilities;
+    PlatformSettings_t *settings;
     // memory
     Memory_t* (*memory_allocate)(size_t size);
     void (*memory_release)(Memory_t **memory_pptr);
     // gfx
     void (*gfx_clear_buffer)(void);
-    void (*gfx_load_texture)(char *name, TextureRGB_t *dest);
-    void (*gfx_draw_texture)(TextureRGB_t *texture, int x, int y);
+    void (*gfx_load_texture)(char *name, Texture_t *dest);
+    void (*gfx_draw_texture)(Texture_t *texture, int x, int y);
     // input
     char (*input_read)(void);
     // audio
@@ -39,14 +59,15 @@ struct Platform
 
 struct Memory
 {
-    size_t size;
+    size_t size_bytes;
     uint8_t buffer[];
 };
 
-struct TextureRGB
+struct Texture
 {
     uint32_t width;
     uint32_t height;
+    uint8_t pixel_size_bytes;
     uint8_t pixels[];
 };
 
