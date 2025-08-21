@@ -103,7 +103,7 @@ void app_setup(Platform_t *platform)
 
     platform->settings->gfx_pixel_size_bytes = 1;
     platform->settings->gfx_buffer_width = 160;
-    platform->settings->gfx_buffer_height = 48;
+    platform->settings->gfx_buffer_height = 32;
 
     size_t required_gfx_memory = 
     platform->settings->gfx_pixel_size_bytes *

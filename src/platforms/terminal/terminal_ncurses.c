@@ -272,8 +272,8 @@ void gfx_init(PlatformSettings_t *settings, Texture_t **gfx_buffer_pptr)
     audiovis_height = settings->gfx_buffer_height;
     audiovis_mid_row = audiovis_height / 4;
 
-    main_window     = newwin(settings->gfx_buffer_height * 0.5f, settings->gfx_buffer_width * 0.6f, 0, 0);
-    debug_window    = newwin(settings->gfx_buffer_height * 0.5f, settings->gfx_buffer_width * 0.6f, settings->gfx_buffer_height * 0.5f, 0);
+    main_window     = newwin((settings->gfx_buffer_height / 16) * 11, settings->gfx_buffer_width * 0.6f, 0, 0);
+    debug_window    = newwin((settings->gfx_buffer_height / 16) * 5, settings->gfx_buffer_width * 0.6f, ((settings->gfx_buffer_height / 16) * 11), 0);
     audiovis_window = newwin(audiovis_height,                    audiovis_width                   , 0, settings->gfx_buffer_width * 0.6f);
 
     nodelay(main_window, true);
