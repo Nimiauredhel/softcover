@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define AUDIO_PLATFORM_BUFFER_LENGTH (4096)
+#define AUDIO_PLATFORM_BUFFER_LENGTH (16384)
 
 typedef struct AudioBuffer
 {

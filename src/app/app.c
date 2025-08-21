@@ -4,6 +4,8 @@
 
 #include "softcover_platform.h"
 
+#define APP_TEST_AUDIO_SAMPLE_LEN (8192)
+
 typedef struct Thing
 {
     size_t texture_idx;
@@ -15,7 +17,7 @@ typedef struct AppMemory
 {
     Thing_t things[2];
     uint16_t controlled_thing;
-    float audio_samples[2][1024];
+    float audio_samples[2][APP_TEST_AUDIO_SAMPLE_LEN];
     size_t audio_sample_length;
     size_t scratch_size;
     size_t scratch_used;
@@ -51,15 +53,26 @@ void app_init(const Platform_t *platform, Memory_t **memory_pptr)
     app_memory->things[1].x = 5;
     app_memory->things[1].y = 4;
 
-    app_memory->audio_sample_length = 1024;
+    app_memory->audio_sample_length = APP_TEST_AUDIO_SAMPLE_LEN;
 
-    for (int i = 0; i < app_memory->audio_sample_length; i+=2)
+    for (size_t i = 0; i < app_memory->audio_sample_length; i+=2)
     {
-        app_memory->audio_samples[0][i] = -1.0f + (2 * (float)i/(float)app_memory->audio_sample_length);
-        app_memory->audio_samples[0][i+1] = -1.0f + (2 * (float)i/(float)app_memory->audio_sample_length);
+        float sample_percent_f = (float)i/(float)app_memory->audio_sample_length;
 
-        app_memory->audio_samples[1][i] = sinf((float)i/(float)app_memory->audio_sample_length);
-        app_memory->audio_samples[1][i+1] = sinf((float)i/(float)app_memory->audio_sample_length);
+        float values[5] =
+        {
+            (1.0f - sample_percent_f) * cosf(sample_percent_f),
+            (1.0f - sample_percent_f) * cosf(32.0f * sample_percent_f),
+            (1.0f - sample_percent_f) * -0.9f,
+            (1.0f - sample_percent_f) * 0.9f,
+            0.0f,
+        };
+
+        app_memory->audio_samples[0][i] = (-1.0f + sample_percent_f) * values[1 + (3 * (sample_percent_f > 0.75f)) - (sample_percent_f > 0.9f)];
+        app_memory->audio_samples[0][i+1] = values[1 + (3 * (sample_percent_f > 0.75f)) - (sample_percent_f > 0.9f)];
+
+        app_memory->audio_samples[1][i] = values[3 - (2 * (sample_percent_f < 0.75f))];
+        app_memory->audio_samples[1][i+1] = values[3 - (2 * (sample_percent_f < 0.75f))];
     }
 
     app_memory->controlled_thing = 0;
