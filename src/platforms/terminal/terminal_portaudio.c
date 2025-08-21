@@ -1,11 +1,11 @@
 #include "terminal_portaudio.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "portaudio.h"
 
 static PaStream *audio_stream;
-static AudioBuffer_t audio_user_buffer = {0};
 
 static int paStreamCallback(const void *inputBuffer, void *outputBuffer, unsigned long framesPerBuffer,
                            const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void *userData)
@@ -14,21 +14,22 @@ static int paStreamCallback(const void *inputBuffer, void *outputBuffer, unsigne
     (void) inputBuffer;
 
     /* Cast data passed through stream to our structure. */
-    AudioBuffer_t *data = (AudioBuffer_t*)userData; 
+    FloatRing_t *data = (FloatRing_t*)userData; 
 
     float *out = (float*)outputBuffer;
     
     for(uint32_t i = 0; i < framesPerBuffer; i++)
     {
-        if (data->head == data->tail)
+        if (data->length <= 0)
         {
             out[i] = 0.0f;
             continue;
         }
 
         out[i] = data->buffer[data->head];
-        data->head++;
-        if (data->head >= data->length) data->head = 0;
+        data->head = data->head + 1;
+        if (data->head >= data->capacity) data->head -= data->capacity;
+        data->length--;
     }
 
     return 0;
@@ -51,30 +52,15 @@ static void set_audio(PaStream *stream, bool active)
     }
 }
 
-const AudioBuffer_t* audio_get_buffer_readonly(void)
+void audio_init(PlatformSettings_t *settings, FloatRing_t **audio_buffer_pptr)
 {
-    return (const AudioBuffer_t*)&audio_user_buffer;
-}
+    /// init audio buffer
+    *audio_buffer_pptr = (FloatRing_t *)malloc(sizeof(FloatRing_t) + (sizeof(float) * settings->audio_buffer_size));
+    FloatRing_t *audio_buffer = (FloatRing_t *)*audio_buffer_pptr;
+    memset(audio_buffer, 0, sizeof(*audio_buffer));
+    audio_buffer->capacity = settings->audio_buffer_size;
 
-void audio_play_chunk(float *chunk, uint16_t len)
-{
-    for (int i = 0; i < len; i++)
-    {
-        audio_user_buffer.buffer[audio_user_buffer.tail] = chunk[i];
-
-        audio_user_buffer.tail += 1;
-
-        if (audio_user_buffer.tail >= audio_user_buffer.length) audio_user_buffer.tail = 0;
-
-        if (audio_user_buffer.tail == audio_user_buffer.head)
-        {
-            break;
-        }
-    }
-}
-
-void audio_init(void)
-{
+    /// init portaudio
     PaError err;
 
     err = Pa_Initialize();
@@ -83,10 +69,6 @@ void audio_init(void)
     {
         // TODO: handle error
     }
-
-    audio_user_buffer.head = 0;
-    audio_user_buffer.tail = 0;
-    audio_user_buffer.length = AUDIO_PLATFORM_BUFFER_LENGTH;
 
     PaStreamParameters output_parameters = {0};
     output_parameters.device = Pa_GetDefaultOutputDevice(); /* default input device */
@@ -102,7 +84,7 @@ void audio_init(void)
                                paFramesPerBufferUnspecified,        
                                paNoFlag,
                                paStreamCallback,
-                               &audio_user_buffer);
+                               audio_buffer);
     if(err != paNoError)
     {
         // TODO: handle error

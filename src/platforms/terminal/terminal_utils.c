@@ -93,9 +93,14 @@ void gfx_load_texture(char *name, Texture_t *dest)
 
     uint8_t *temp_buff = NULL;
 
-    uint32_t ret = loadbmp_decode_file(name, &temp_buff, &dest->width, &dest->height, LOADBMP_RGB);
-    dest->pixel_size_bytes = 3;
-    size_t size = dest->width * dest->width * dest->pixel_size_bytes;
+    uint32_t width;
+    uint32_t height;
+
+    uint8_t dst_pixel_size_bytes = 1; // ncurses 8 color
+
+    uint32_t ret = loadbmp_decode_file(name, &temp_buff, &width, &height, LOADBMP_RGB);
+
+    size_t dst_size = width * height * dst_pixel_size_bytes;
 
     if (ret != 0)
     {
@@ -107,7 +112,16 @@ void gfx_load_texture(char *name, Texture_t *dest)
 
     if (temp_buff != NULL)
     {
-        memcpy(dest->pixels, temp_buff, size);
+        dest->width = width;
+        dest->height = height;
+        dest->pixel_size_bytes = dst_pixel_size_bytes;
+
+        for (uint16_t pixel = 0; pixel < dst_size; pixel++)
+        {
+            uint16_t src_pixel = pixel * 3;
+            dest->pixels[pixel] = gfx_rgb_to_color_pair(temp_buff[src_pixel], temp_buff[src_pixel+1], temp_buff[src_pixel+2]);
+        }
+
         free(temp_buff);
     }
 }

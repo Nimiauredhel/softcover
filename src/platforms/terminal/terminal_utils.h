@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <time.h>
 
-#include "softcover_platform.h"
+#include "common_structs.h"
 
 /**
  * @brief Global flag set by OS termination signals

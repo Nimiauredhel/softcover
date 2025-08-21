@@ -5,29 +5,45 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "common_structs.h"
+
 typedef struct Platform Platform_t;
 typedef struct PlatformCapabilities PlatformCapabilities_t;
 typedef struct PlatformSettings PlatformSettings_t;
 
-typedef struct Memory Memory_t;
-
-typedef struct Texture Texture_t;
+typedef struct AppMemoryPartition AppMemoryPartition_t;
 
 typedef void (*AppSetupFunc)(const Platform_t *platform);
-typedef void (*AppInitFunc)(const Platform_t *platform, Memory_t *memory);
-typedef void (*AppLoopFunc)(const Platform_t *platform, Memory_t *memory);
-typedef void (*AppExitFunc)(const Platform_t *platform, Memory_t *memory);
+typedef void (*AppInitFunc)(const Platform_t *platform, AppMemoryPartition_t *memory);
+typedef void (*AppLoopFunc)(const Platform_t *platform);
+typedef void (*AppExitFunc)(const Platform_t *platform);
 
 struct PlatformCapabilities
 {
-    size_t app_memory_limit_bytes;
+    size_t app_memory_max_bytes;
+
+    size_t gfx_buffer_max_bytes;
+    uint32_t gfx_buffer_width_max;
+    uint32_t gfx_buffer_height_max;
+    uint8_t gfx_pixel_max_bytes;
+
     useconds_t gfx_frame_time_min_us;
+
+    uint16_t audio_buffer_size_max;
 };
 
 struct PlatformSettings
 {
-    size_t app_memory_required_bytes;
+    size_t app_memory_serializable_bytes;
+    size_t app_memory_ephemeral_bytes;
+
+    uint32_t gfx_buffer_width;
+    uint32_t gfx_buffer_height;
+    uint8_t gfx_pixel_size_bytes;
+
     useconds_t gfx_frame_time_target_us;
+
+    uint16_t audio_buffer_size;
 };
 
 struct Platform
@@ -35,18 +51,10 @@ struct Platform
     // configuration
     const PlatformCapabilities_t *capabilities;
     PlatformSettings_t *settings;
-    // memory
-    Memory_t* (*memory_allocate)(size_t size);
-    void (*memory_release)(Memory_t **memory_pptr);
-    // gfx
-    void (*gfx_clear_buffer)(void);
-    void (*gfx_load_texture)(char *name, Texture_t *dest);
-    void (*gfx_draw_texture)(Texture_t *texture, int x, int y);
     // input
     char (*input_read)(void);
-    // audio
-    void (*audio_play_chunk)(float *chunk, uint16_t len);
     // storage
+    void (*gfx_load_texture)(char *name, Texture_t *dest);
     void (*storage_save_state)(char *state_name);
     void (*storage_load_state)(char *state_name);
     // utils
@@ -57,18 +65,12 @@ struct Platform
 
 };
 
-struct Memory
+struct AppMemoryPartition
 {
-    size_t size_bytes;
-    uint8_t buffer[];
-};
-
-struct Texture
-{
-    uint32_t width;
-    uint32_t height;
-    uint8_t pixel_size_bytes;
-    uint8_t pixels[];
+    Memory_t *serializable;
+    Memory_t *ephemeral;
+    Texture_t *gfx_buffer;
+    FloatRing_t *audio_buffer;
 };
 
 #endif

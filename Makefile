@@ -6,6 +6,7 @@ LIB_NAME=app$(LIB_SUFFIX)
 LIB_SRC_DIR=src/app/
 LIB_PATH=$(BUILD_DIR)$(LIB_NAME)
 
+COMMON_SOURCES=src/common/*.c
 COMMON_INCLUDES=-Isrc/common
 EXE_INCLUDES=-lncurses -lportaudio
 LIB_INCLUDES=-lm
@@ -37,14 +38,14 @@ app: $(LIB_PATH)
 $(EXE_PATH): $(EXE_SRC_DIR)*.c
 	mkdir -p $(BUILD_DIR)
 	rm -f compile_commands.json
-	bear -- gcc $(EXE_SRC_DIR)*.c $(COMMON_INCLUDES) $(EXE_INCLUDES) $(DEFINES) $(FLAGS) -o $(EXE_PATH)
+	bear -- gcc $(EXE_SRC_DIR)*.c $(COMMON_SOURCES) $(COMMON_INCLUDES) $(EXE_INCLUDES) $(DEFINES) $(FLAGS) -o $(EXE_PATH)
 	mv compile_commands.json $(BUILD_DIR)platform_compile_commands.json
 	jq -s add $(BUILD_DIR)*.json > compile_commands.json
 
 $(LIB_PATH): $(LIB_SRC_DIR)*.c
 	mkdir -p $(BUILD_DIR)
 	rm -f compile_commands.json
-	bear -- gcc $(LIB_SRC_DIR)*.c $(COMMON_INCLUDES) $(LIB_INCLUDES) $(DEFINES) $(FLAGS) -fPIC -shared -o $(LIB_PATH)
+	bear -- gcc $(LIB_SRC_DIR)*.c $(COMMON_SOURCES) $(COMMON_INCLUDES) $(LIB_INCLUDES) $(DEFINES) $(FLAGS) -fPIC -shared -o $(LIB_PATH)
 	mv compile_commands.json $(BUILD_DIR)app_compile_commands.json
 	jq -s add $(BUILD_DIR)*.json > compile_commands.json
                                      

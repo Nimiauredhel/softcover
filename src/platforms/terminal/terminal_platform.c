@@ -6,11 +6,12 @@
 #include <time.h>                                                                                                                                                                                                                         
 #include <sys/stat.h>                                                                                                                                                                                                                     
 
+#include "common_interface.h"
+#include "common_structs.h"
+
 #include "terminal_utils.h"
 #include "terminal_ncurses.h"
 #include "terminal_portaudio.h"
-
-#include "softcover_platform.h"
 
 #ifndef LIB_NAME
 #define LIB_NAME ""
@@ -43,18 +44,34 @@ static AppExitFunc app_exit;
 static void *lib_handle = NULL;
 static void (*func_handle)(void) = NULL;
 
-static Memory_t *app_main_memory = NULL;
+static AppMemoryPartition_t app_memory = {0};
 
 static const PlatformCapabilities_t capabilities =
 {
-    .app_memory_limit_bytes = 128*1024,
+    .app_memory_max_bytes = 128*1024,
+
+    .gfx_buffer_max_bytes = 15360,
+    .gfx_buffer_width_max = 160,
+    .gfx_buffer_height_max = 32,
+    .gfx_pixel_max_bytes = 1,
+
     .gfx_frame_time_min_us = 8000,
+
+    .audio_buffer_size_max = 65534,
 };
 
 static const PlatformSettings_t default_settings =
 {
-    .app_memory_required_bytes = capabilities.app_memory_limit_bytes,
-    .gfx_frame_time_target_us = capabilities.gfx_frame_time_min_us,
+    .app_memory_serializable_bytes = capabilities.app_memory_max_bytes/10,
+    .app_memory_ephemeral_bytes = capabilities.app_memory_max_bytes/10,
+
+    .gfx_pixel_size_bytes = capabilities.gfx_pixel_max_bytes,
+    .gfx_buffer_width = capabilities.gfx_buffer_width_max,
+    .gfx_buffer_height = capabilities.gfx_buffer_height_max,
+
+    .gfx_frame_time_target_us = capabilities.gfx_frame_time_min_us*2,
+
+    .audio_buffer_size = 16384,
 };
 
 static PlatformSettings_t platform_settings = default_settings;
@@ -64,17 +81,9 @@ static const Platform_t platform =
     .capabilities = &capabilities,
     .settings = &platform_settings,
 
-    .memory_allocate = memory_allocate,
-    .memory_release = memory_release,
-
-    .gfx_clear_buffer = gfx_clear_buffer,
-    .gfx_draw_texture = gfx_draw_texture,
-    .gfx_load_texture = gfx_load_texture,
-
     .input_read = input_read,
 
-    .audio_play_chunk = audio_play_chunk,
-
+    .gfx_load_texture = gfx_load_texture,
     .storage_save_state = storage_save_state,
     .storage_load_state = storage_load_state,
 
@@ -91,7 +100,7 @@ Memory_t* memory_allocate(size_t size)
     if (memory == NULL)
     {
         should_terminate = true;
-        debug_log("Failed to allocate main memory.");
+        debug_log("Failed to allocate memory chunk.");
         return NULL;
     }
 
@@ -125,7 +134,7 @@ void storage_save_state(char *state_name)
         return;
     }
     
-    fwrite(app_main_memory->buffer, 1, app_main_memory->size_bytes, file);
+    fwrite(app_memory.serializable->buffer, 1, app_memory.serializable->size_bytes, file);
     fclose(file);
 }
 
@@ -149,15 +158,15 @@ void storage_load_state(char *state_name)
     fseek(file, 0, SEEK_END);
     file_size = ftell(file);
 
-    if (file_size != app_main_memory->size_bytes)
+    if (file_size != app_memory.serializable->size_bytes)
     {
-        memory_release(&app_main_memory);
-        app_main_memory = memory_allocate(file_size);
+        memory_release(&app_memory.serializable);
+        app_memory.serializable = memory_allocate(file_size);
     }
 
     rewind(file);
     
-    fread(app_main_memory->buffer, 1, file_size, file);
+    fread(app_memory.serializable->buffer, 1, file_size, file);
     fclose(file);
 }
 
@@ -173,6 +182,8 @@ void set_should_terminate(bool value)
 
 static void load_app(void)
 {
+    static char debug_buff[128] = {0};
+
     debug_log("Loading app layer.\n");
 
     if (lib_handle != NULL)
@@ -187,8 +198,8 @@ static void load_app(void)
 
     if (lib_handle == NULL )
     {
-        //printf("Failed to load [%s]: %s\n", lib_path, dlerror());
-        debug_log("Failed to load app layer.");
+        snprintf(debug_buff, sizeof(debug_buff), "Failed to load [%s]: %s\n", lib_path, dlerror());
+        debug_log(debug_buff);
         should_terminate = true;
         return;
     }
@@ -207,20 +218,24 @@ int main(int argc, char **argv)
 {
 #define TERMINATION_POINT if (should_terminate) goto platform_termination
 
+    static char debug_buff[128] = {0};
     static struct stat file_stat = {0};
 
-    printf("Program started.\n");
+    debug_init();
+    debug_log("Program started.\n");
 
     initialize_signal_handler();
 
     if (argc > 1)
     {
         snprintf(lib_path, sizeof(lib_path), "%s", argv[1]);
-        printf("Using given library path: %s.\n", lib_path);
+        snprintf(debug_buff, sizeof(debug_buff), "Using given library path: %s.\n", lib_path);
+        debug_log(debug_buff);
     }
     else
     {
-        printf("Using default library path: %s.\n", lib_path);
+        snprintf(debug_buff, sizeof(debug_buff), "Using default library path: %s.\n", lib_path);
+        debug_log(debug_buff);
     }
 
     load_app();
@@ -230,51 +245,58 @@ int main(int argc, char **argv)
     app_setup(&platform);
     TERMINATION_POINT;
 
-    /// initializing platform modules according to given settings
-    /// TODO: use given settings
-    audio_init();
-    gfx_init();
-
-    app_main_memory = memory_allocate(platform_settings.app_memory_required_bytes);
+    app_memory.serializable = memory_allocate(platform_settings.app_memory_serializable_bytes);
     TERMINATION_POINT;
+    app_memory.ephemeral = memory_allocate(platform_settings.app_memory_ephemeral_bytes);
+    TERMINATION_POINT;
+
+    /// initializing platform modules according to given settings
+    audio_init(&platform_settings, &app_memory.audio_buffer);
+    gfx_init(&platform_settings, &app_memory.gfx_buffer);
 
     if (app_init != NULL)
     {
-        app_init(&platform, app_main_memory);
+        app_init(&platform, &app_memory);
     }
     else
     {
     }
 
+    TERMINATION_POINT;
+
     while(!should_terminate)
     {
         if (app_loop != NULL)
         {
-            app_loop(&platform, app_main_memory);
+            app_loop(&platform);
         }
         else
         {
         }
 
-        gfx_sync_buffer();
-        gfx_audio_vis(audio_get_buffer_readonly());
+        gfx_sync_buffer(app_memory.gfx_buffer);
+        gfx_audio_vis(app_memory.audio_buffer);
 
         stat(lib_path, &file_stat);
         lib_modified_time = file_stat.st_mtime;
 
         if (lib_modified_time != lib_load_time)
         {
-            //printf("Library modification detected.\n");
+            debug_log("App modification detected.\n");
             load_app();
         }
 
-        usleep(16000);
+        usleep(platform_settings.gfx_frame_time_target_us);
     }
 
 platform_termination:
 
-    if (app_exit != NULL) app_exit(&platform, app_main_memory);
-    memory_release(&app_main_memory);
+    if (app_exit != NULL) app_exit(&platform);
+
+    memory_release(&app_memory.serializable);
+    memory_release(&app_memory.ephemeral);
+    free(app_memory.gfx_buffer);
+    free(app_memory.audio_buffer);
 
     debug_log("Program halted, press ENTER to quit.");
     debug_break();

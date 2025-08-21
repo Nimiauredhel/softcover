@@ -7,15 +7,6 @@ static WINDOW *main_window = NULL;
 static WINDOW *debug_window = NULL;
 static WINDOW *audiovis_window = NULL;
 
-#define WINDOW_HEIGHT (24)
-#define WINDOW_WIDTH (96)
-
-#define DEBUG_WINDOW_HEIGHT (24)
-#define DEBUG_WINDOW_WIDTH (128)
-
-#define AUDIOVIS_WINDOW_HEIGHT (32)
-#define AUDIOVIS_WINDOW_WIDTH (64)
-
 #define COLOR_PAIR_BG_BLACK (0)
 #define COLOR_PAIR_BG_RED (1)
 #define COLOR_PAIR_BG_GREEN (2)
@@ -36,16 +27,42 @@ typedef struct DebugRing
 } DebugRing_t;
 
 static bool ncurses_is_initialized = false;
-static uint8_t ncurses_buffer[WINDOW_HEIGHT][WINDOW_WIDTH] = { { COLOR_PAIR_BG_YELLOW } };
 
 static bool debug_is_break = false;
 static DebugRing_t debug_ring = {0};
+
+static uint8_t audiovis_width;
+static uint8_t audiovis_height;
+static int audiovis_mid_row;
+
+static void debug_refresh_window(void)
+{
+    werase(debug_window);
+
+    wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
+    mvwprintw(debug_window, 0, 0, "%s", debug_is_break ? "BREAK - c to continue" : "DEBUG");
+    wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
+
+    uint8_t idx = debug_ring.head;
+
+    for (uint8_t i = 0; i < debug_ring.len; i++)
+    {
+        wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BG_BLACK));
+        mvwprintw(debug_window, i, 8, "[%u]%u: %s", idx, i, debug_ring.debug_messages[idx]);
+        wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
+
+        idx++;
+        if (idx >= DEBUG_RING_CAPACITY) idx = 0;
+    }
+
+    wrefresh(debug_window);
+}
 
 /**
  * @brief Inefficiently translates a given RGB color to an approximate ncurses color pair.
  * Likely has room for improvement, but also extremely low priority.
  */
-static uint8_t rgb_to_color_pair(uint8_t r, uint8_t g, uint8_t b)
+uint8_t gfx_rgb_to_color_pair(uint8_t r, uint8_t g, uint8_t b)
 {
     uint16_t sum = r + g + b;
 
@@ -98,78 +115,25 @@ static uint8_t rgb_to_color_pair(uint8_t r, uint8_t g, uint8_t b)
     return winner;
 }
 
-static void debug_refresh_window(void)
-{
-    werase(debug_window);
-
-    wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
-    mvwprintw(debug_window, 0, 0, "%s", debug_is_break ? "BREAK - c to continue" : "DEBUG");
-    wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
-
-    uint8_t idx = debug_ring.head;
-
-    for (uint8_t i = 0; i < debug_ring.len; i++)
-    {
-        wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BG_BLACK));
-        mvwprintw(debug_window, i, 8, "[%u]%u: %s", idx, i, debug_ring.debug_messages[idx]);
-        wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
-
-        idx++;
-        if (idx >= DEBUG_RING_CAPACITY) idx = 0;
-    }
-
-    wrefresh(debug_window);
-}
-
 char input_read(void)
 {
     char c = wgetch(main_window);
     return c;
 }
 
-void gfx_clear_buffer(void)
-{
-    memset(ncurses_buffer, COLOR_PAIR_BG_BLACK, sizeof(ncurses_buffer));
-}
-
-void gfx_draw_texture(Texture_t *texture, int start_x, int start_y)
-{
-    uint8_t color = COLOR_PAIR_BG_BLACK;
-
-    int final_x;
-    int final_y;
-
-    for (uint16_t texture_y = 0; texture_y < texture->height; texture_y++)
-    {
-        for (uint16_t texture_x = 0; texture_x < texture->width; texture_x++)
-        {
-            final_y = start_y + texture_y;
-            final_x = start_x + texture_x;
-
-            while(final_y >= WINDOW_HEIGHT) final_y -= WINDOW_HEIGHT;
-            while(final_y < 0) final_y += WINDOW_HEIGHT;
-            while(final_x >= WINDOW_WIDTH) final_x -= WINDOW_WIDTH;
-            while(final_x < 0) final_x += WINDOW_WIDTH;
-
-            uint16_t pixel_idx = texture->pixel_size_bytes * (texture_x + (texture_y * texture->width));
-
-            color = rgb_to_color_pair(texture->pixels[pixel_idx], texture->pixels[pixel_idx+1], texture->pixels[pixel_idx+2]);
-            ncurses_buffer[final_y][final_x] = color;
-        }
-    }
-}
-
-void gfx_sync_buffer(void)
+void gfx_sync_buffer(Texture_t *gfx_buffer)
 {
     werase(main_window);
 
-    for (int y = 0; y < WINDOW_HEIGHT; y++)
+    for (int y = 0; y < gfx_buffer->height; y++)
     {
-        for(int x = 0; x < WINDOW_WIDTH; x++)
+        for(int x = 0; x < gfx_buffer->width; x++)
         {
-            wattron(main_window, COLOR_PAIR(ncurses_buffer[y][x]));
+            uint8_t val = gfx_buffer->pixels[x + (y * gfx_buffer->width)];
+
+            wattron(main_window, COLOR_PAIR(val));
             mvwaddch(main_window, y, x, ' ');
-            wattroff(main_window, COLOR_PAIR(ncurses_buffer[y][x]));
+            wattroff(main_window, COLOR_PAIR(val));
         }
     }
 
@@ -219,36 +183,33 @@ void debug_break(void)
     debug_is_break = false;
 }
 
-void gfx_audio_vis(const AudioBuffer_t *audio_buffer)
+void gfx_audio_vis(const FloatRing_t *audio_buffer)
 {
-    static const int mid_row = AUDIOVIS_WINDOW_HEIGHT/4;
-
     werase(audiovis_window);
 
-    uint16_t frames_per_column = (AUDIO_PLATFORM_BUFFER_LENGTH / 2) / AUDIOVIS_WINDOW_WIDTH;
+    uint16_t frames_per_column = (audio_buffer->capacity / 2) / audiovis_width;
+    uint16_t count = 0; 
     bool silence = false;
 
-    for (uint16_t i = 0; i < AUDIOVIS_WINDOW_WIDTH; i++)
+    for (uint16_t i = 0; i < audiovis_width; i++)
     {
         float frame_sums_stereo[2] = { 0.0f, 0.0f };
 
         for (uint16_t j = 0; j < frames_per_column; j++)
         {
-            uint16_t idx = (audio_buffer->head + (i * frames_per_column) + j);
+            count = j + (i * frames_per_column); 
+            uint16_t idx = (audio_buffer->head + count) % audio_buffer->capacity;
 
-            if (idx >= AUDIO_PLATFORM_BUFFER_LENGTH) idx -= AUDIO_PLATFORM_BUFFER_LENGTH;
+            int mid_color = count == 0 ? COLOR_PAIR_BG_CYAN : COLOR_PAIR_BG_BLUE;
 
-            int mid_color = idx == audio_buffer->head ? COLOR_PAIR_BG_CYAN : COLOR_PAIR_BG_BLUE;
-
-            wattron(audiovis_window, COLOR_PAIR(mid_color));
-            mvwaddch(audiovis_window, mid_row, i, ' ');
-            mvwaddch(audiovis_window, mid_row*3, i, ' ');
+            wattron(audiovis_window,  COLOR_PAIR(mid_color));
+            mvwaddch(audiovis_window, audiovis_mid_row,     i, ' ');
+            mvwaddch(audiovis_window, audiovis_mid_row * 3, i, ' ');
             wattroff(audiovis_window, COLOR_PAIR(mid_color));
 
-            if (idx == audio_buffer->tail)
+            if (!silence && count >= audio_buffer->length)
             {
                 silence = true;
-                break;
             }
 
             if (idx % 2 == 0)
@@ -261,29 +222,24 @@ void gfx_audio_vis(const AudioBuffer_t *audio_buffer)
             }
         }
 
-        if (silence)
-        {
-            continue;
-        }
-
         for (int8_t j = 0; j < 2; j++)
         {
             float value = frame_sums_stereo[j] / (frames_per_column * 0.5f);
             float dir = value > 0.0f ? 1.0f : -1.0f;
             
-            int max_val_abs = mid_row * value * dir;
-            int color_pair = value > 0.0f ? COLOR_PAIR_BG_GREEN : COLOR_PAIR_BG_RED;
+            int max_val_abs = audiovis_mid_row * value * dir;
+            int color_pair = silence ? COLOR_PAIR_BG_BLUE
+                : value > 0.0f ? COLOR_PAIR_BG_GREEN : COLOR_PAIR_BG_RED;
 
             wattron(audiovis_window, COLOR_PAIR(color_pair));
 
             for (int k = 1; k <= max_val_abs; k++)
             {
-                mvwaddch(audiovis_window, (mid_row * (1 + (2*j)))+(k*dir*-1), i, ' ');
+                mvwaddch(audiovis_window, (audiovis_mid_row * (1 + (2*j)))+(k*dir*-1), i, ' ');
             }
 
             wattroff(audiovis_window, COLOR_PAIR(color_pair));
         }
-
     }
 
     wrefresh(audiovis_window);
@@ -295,16 +251,30 @@ void debug_init(void)
     debug_ring.len = 0;
 }
 
-void gfx_init(void)
+void gfx_init(PlatformSettings_t *settings, Texture_t **gfx_buffer_pptr)
 {
-    initscr();
+    /// init gfx buffer
+    *gfx_buffer_pptr = (Texture_t *)malloc(sizeof(Texture_t) +
+    (settings->gfx_buffer_width * settings->gfx_buffer_height * settings->gfx_pixel_size_bytes));
+    Texture_t *gfx_buffer = (Texture_t *)*gfx_buffer_pptr;
+    memset(gfx_buffer, 0, sizeof(*gfx_buffer));
+    gfx_buffer->width = settings->gfx_buffer_width;
+    gfx_buffer->height = settings->gfx_buffer_height;
+    gfx_buffer->pixel_size_bytes = settings->gfx_pixel_size_bytes;
 
+    /// init ncurses
+
+    initscr();
     noecho();
     cbreak();
 
-    main_window = newwin(WINDOW_HEIGHT, WINDOW_WIDTH, 0, 0);
-    debug_window = newwin(DEBUG_WINDOW_HEIGHT, DEBUG_WINDOW_WIDTH, WINDOW_HEIGHT, 0);
-    audiovis_window = newwin(AUDIOVIS_WINDOW_HEIGHT, AUDIOVIS_WINDOW_WIDTH, 0, WINDOW_WIDTH);
+    audiovis_width = settings->gfx_buffer_width * 0.4f;
+    audiovis_height = settings->gfx_buffer_height;
+    audiovis_mid_row = audiovis_height / 4;
+
+    main_window     = newwin(settings->gfx_buffer_height * 0.5f, settings->gfx_buffer_width * 0.6f, 0, 0);
+    debug_window    = newwin(settings->gfx_buffer_height * 0.5f, settings->gfx_buffer_width * 0.6f, settings->gfx_buffer_height * 0.5f, 0);
+    audiovis_window = newwin(audiovis_height,                    audiovis_width                   , 0, settings->gfx_buffer_width * 0.6f);
 
     nodelay(main_window, true);
     nodelay(debug_window, true);
