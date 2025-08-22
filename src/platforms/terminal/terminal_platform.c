@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,7 +25,7 @@ void storage_load_state(char *state_name);
 bool get_should_terminate(void);
 void set_should_terminate(bool value);
 
-static const char *state_filename_format = "%.state";
+static const char *state_filename_format = "%s.state";
 
 static char lib_path[256] = LIB_NAME;
 
@@ -122,17 +123,23 @@ void memory_release(Memory_t **memory_pptr)
 
 void storage_save_state(char *state_name)
 {
+    static char debug_buff[128] = {0};
+
     char file_name[256] = {0};
     FILE *file = NULL;
 
     snprintf(file_name, sizeof(file_name), state_filename_format, state_name);
 
+    snprintf(debug_buff, sizeof(debug_buff), "Saving '%s'.", file_name);
+    debug_log(debug_buff);
+
     file = fopen(file_name, "wb");
 
     if (file == NULL)
     {
-        perror("Failed to create file");
-        //exit(EXIT_FAILURE);
+        int err = errno;
+        snprintf(debug_buff, sizeof(debug_buff), "Failed to save '%s': %s", file_name, strerror(err));
+        debug_log(debug_buff);
         return;
     }
     
@@ -142,18 +149,24 @@ void storage_save_state(char *state_name)
 
 void storage_load_state(char *state_name)
 {
+    static char debug_buff[128] = {0};
+
     char file_name[256] = {0};
     size_t file_size = 0;
     FILE *file = NULL;
 
     snprintf(file_name, sizeof(file_name), state_filename_format, state_name);
 
+    snprintf(debug_buff, sizeof(debug_buff), "Loading '%s'.", file_name);
+    debug_log(debug_buff);
+
     file = fopen(file_name, "rb");
 
     if (file == NULL)
     {
-        perror("Failed to open file");
-        //exit(EXIT_FAILURE);
+        int err = errno;
+        snprintf(debug_buff, sizeof(debug_buff), "Failed to load '%s': %s", file_name, strerror(err));
+        debug_log(debug_buff);
         return;
     }
 
