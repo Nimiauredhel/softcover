@@ -18,5 +18,6 @@ void signal_handler(int signum);
 int random_range(int min, int max);
 float seconds_since_clock(struct timespec *start_clock);
 void gfx_load_texture(char *name, Texture_t *dest);
+void audio_load_wav(char *name, AudioClip_t *dest);
 
 #endif

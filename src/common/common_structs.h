@@ -7,6 +7,7 @@
 
 typedef struct Memory Memory_t;
 typedef struct Texture Texture_t;
+typedef struct AudioClip AudioClip_t;
 typedef struct ByteRing ByteRing_t;
 typedef struct FloatRing FloatRing_t;
 
@@ -22,6 +23,12 @@ struct Texture
     uint16_t height;
     uint8_t pixel_size_bytes;
     uint8_t pixels[];
+};
+
+struct AudioClip
+{
+    uint32_t num_samples;
+    float samples[];
 };
 
 struct ByteRing

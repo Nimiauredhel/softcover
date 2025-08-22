@@ -8,6 +8,8 @@
 #define LOADBMP_IMPLEMENTATION
 #include "loadbmp.h"
 
+#include "tinywav.h"
+
 /**
  * Global flag set by OS termination signals
  * and polled by functions to allow graceful termination.
@@ -128,4 +130,32 @@ void gfx_load_texture(char *name, Texture_t *dest)
             name, dest->width, dest->height, dest->pixel_size_bytes);
         debug_log(debug_buff);
     }
+}
+
+void audio_load_wav(char *name, AudioClip_t *dest)
+{
+#define BLOCK_SIZE (256)
+
+    static char debug_buff[128] = {0};
+
+    TinyWav tw;
+    tinywav_open_read(&tw, name,
+    TW_INTERLEAVED); // LRLRLRLRLRLRLRLRLR
+
+    uint32_t num_samples = tw.h.Subchunk2Size / tw.h.NumChannels * tw.h.BitsPerSample / 8;
+    uint32_t num_blocks = num_samples / BLOCK_SIZE;
+    size_t clip_size = sizeof(AudioClip_t) + (sizeof(float) * num_samples);
+
+    snprintf(debug_buff, sizeof(debug_buff), "Loading WAV file '%s', size: %lu bytes.", name, clip_size);
+    debug_log(debug_buff);
+
+    memset(dest, 0, clip_size);
+    dest->num_samples = num_samples;
+
+    for (uint32_t i = 0; i < num_blocks; i++) 
+    {
+        tinywav_read_f(&tw, dest->samples+(num_blocks*i), BLOCK_SIZE);
+    }
+
+    tinywav_close_read(&tw);
 }

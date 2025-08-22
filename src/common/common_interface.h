@@ -57,6 +57,7 @@ struct Platform
     PlatformSettings_t *settings;
     // storage
     void (*gfx_load_texture)(char *name, Texture_t *dest);
+    void (*audio_load_wav)(char *name, AudioClip_t *dest);
     void (*storage_save_state)(char *state_name);
     void (*storage_load_state)(char *state_name);
     // utils

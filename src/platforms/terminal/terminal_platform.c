@@ -49,7 +49,7 @@ static AppMemoryPartition_t app_memory = {0};
 
 static const PlatformCapabilities_t capabilities =
 {
-    .app_memory_max_bytes = 128*1024,
+    .app_memory_max_bytes = 4096*1024,
 
     .gfx_buffer_max_bytes = 15360,
     .gfx_buffer_width_max = 160,
@@ -87,6 +87,7 @@ static const Platform_t platform =
     .settings = &platform_settings,
 
     .gfx_load_texture = gfx_load_texture,
+    .audio_load_wav = audio_load_wav,
     .storage_save_state = storage_save_state,
     .storage_load_state = storage_load_state,
 
