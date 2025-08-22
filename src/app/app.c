@@ -27,6 +27,7 @@ typedef struct AppSerializables
     bool initialized;
     Thing_t things[2];
     uint16_t controlled_thing_idx;
+    uint16_t mov_speed;
 } AppSerializable_t;
 
 typedef struct AppEphemera
@@ -37,6 +38,82 @@ typedef struct AppEphemera
 } AppEphemeral_t;
 
 static AppMemoryPartition_t *app = NULL;
+
+static char input_read_from_buffer(ByteRing_t *input_buffer);
+static void input_process_all(const Platform_t *platform, AppSerializable_t *serializables, AppEphemeral_t *ephemerals);
+static size_t load_texture_to_scratch(char *name, const Platform_t *platform, AppScratch_t *scratch);
+static void audio_push_sample(float *sample, uint16_t len);
+static void gfx_clear_buffer(void);
+static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y);
+
+static char input_read_from_buffer(ByteRing_t *input_buffer)
+{
+    if (app == NULL || app->serializable == NULL) return '~';
+
+    char c = '~';
+
+    if (byte_ring_pop(input_buffer, (uint8_t *)&c)) return c;
+    return '~';
+}
+
+static void input_process_all(const Platform_t *platform, AppSerializable_t *serializables, AppEphemeral_t *ephemerals)
+{
+    static char debug_buff[128] = {0};
+
+    if (app == NULL || app->serializable == NULL) return;
+
+    char input = '~';
+
+    do
+    {
+        input = input_read_from_buffer(app->input_buffer);
+
+        switch (input)
+        {
+            case 'w':
+                serializables->things[serializables->controlled_thing_idx].y -= serializables->mov_speed;
+                audio_push_sample(ephemerals->audio_samples[serializables->controlled_thing_idx], ephemerals->audio_sample_length);
+                snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", serializables->controlled_thing_idx,
+                        serializables->things[serializables->controlled_thing_idx].x, serializables->things[serializables->controlled_thing_idx].y);
+                platform->debug_log(debug_buff);
+                break;
+            case 'a':
+                serializables->things[serializables->controlled_thing_idx].x -= serializables->mov_speed;
+                audio_push_sample(ephemerals->audio_samples[serializables->controlled_thing_idx], ephemerals->audio_sample_length);
+                snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", serializables->controlled_thing_idx,
+                        serializables->things[serializables->controlled_thing_idx].x, serializables->things[serializables->controlled_thing_idx].y);
+                platform->debug_log(debug_buff);
+                break;
+            case 's':
+                serializables->things[serializables->controlled_thing_idx].y += serializables->mov_speed;
+                audio_push_sample(ephemerals->audio_samples[serializables->controlled_thing_idx], ephemerals->audio_sample_length);
+                snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", serializables->controlled_thing_idx,
+                        serializables->things[serializables->controlled_thing_idx].x, serializables->things[serializables->controlled_thing_idx].y);
+                platform->debug_log(debug_buff);
+                break;
+            case 'd':
+                serializables->things[serializables->controlled_thing_idx].x += serializables->mov_speed;
+                audio_push_sample(ephemerals->audio_samples[serializables->controlled_thing_idx], ephemerals->audio_sample_length);
+                snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", serializables->controlled_thing_idx,
+                        serializables->things[serializables->controlled_thing_idx].x, serializables->things[serializables->controlled_thing_idx].y);
+                platform->debug_log(debug_buff);
+                break;
+            case 'q':
+                serializables->controlled_thing_idx = serializables->controlled_thing_idx == 0 ? 1 : 0;
+                break;
+            case '1':
+                platform->storage_load_state("test_save");
+                break;
+            case '!':
+                platform->storage_save_state("test_save");
+                break;
+            default:
+                break;
+        }
+    }
+    while(input != '~');
+
+}
 
 static size_t load_texture_to_scratch(char *name, const Platform_t *platform, AppScratch_t *scratch)
 {
@@ -110,10 +187,15 @@ void app_setup(Platform_t *platform)
     platform->settings->gfx_buffer_width *
     platform->settings->gfx_buffer_height;
 
-    platform->settings->audio_buffer_size = 16384;
+    platform->settings->audio_buffer_capacity = 16384;
+
+    platform->settings->input_buffer_capacity = 128;
 
     size_t required_state_memory = sizeof(AppSerializable_t) + sizeof(AppEphemeral_t);
-    size_t required_memory_total = required_state_memory + required_gfx_memory + platform->settings->audio_buffer_size;
+
+    size_t required_memory_total = required_state_memory + required_gfx_memory
+        + sizeof(FloatRing_t) + platform->settings->audio_buffer_capacity
+        + sizeof(ByteRing_t) + platform->settings->input_buffer_capacity;
     
     bool sufficient = platform->capabilities->app_memory_max_bytes >= required_memory_total;
 
@@ -133,10 +215,10 @@ void app_setup(Platform_t *platform)
 }
 
 /**
- * @brief Called on app start, after serializable state is loaded, or following an executable hot-reload.
+ * @brief Called on app start,
+ * TODO: also call after serializable state is loaded, or following an executable hot-reload.
  * Must match prototype @ref AppInitFunc.
  */
-
 void app_init(const Platform_t *platform, AppMemoryPartition_t *memory)
 {
     platform->debug_log("App initializing fresh memory partition.");
@@ -199,6 +281,7 @@ void app_init(const Platform_t *platform, AppMemoryPartition_t *memory)
     serializables->things[1].y = 4;
 
     serializables->controlled_thing_idx = 0;
+    serializables->mov_speed = 1;
 
     serializables->initialized = true;
 }
@@ -206,57 +289,12 @@ void app_init(const Platform_t *platform, AppMemoryPartition_t *memory)
 /// must match prototype @ref AppLoopFunc
 void app_loop(const Platform_t *platform)
 {
-    static const int8_t mov_speed = 1;
-    
     static char debug_buff[128] = {0};
 
     AppSerializable_t *serializables = (AppSerializable_t *)app->serializable->buffer;
     AppEphemeral_t *ephemerals = (AppEphemeral_t *)app->ephemeral->buffer;
 
-    char input = platform->input_read();
-
-    switch (input)
-    {
-        case 'w':
-            serializables->things[serializables->controlled_thing_idx].y -= mov_speed;
-            audio_push_sample(ephemerals->audio_samples[serializables->controlled_thing_idx], ephemerals->audio_sample_length);
-            snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", serializables->controlled_thing_idx,
-                    serializables->things[serializables->controlled_thing_idx].x, serializables->things[serializables->controlled_thing_idx].y);
-            platform->debug_log(debug_buff);
-            break;
-        case 'a':
-            serializables->things[serializables->controlled_thing_idx].x -= mov_speed;
-            audio_push_sample(ephemerals->audio_samples[serializables->controlled_thing_idx], ephemerals->audio_sample_length);
-            snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", serializables->controlled_thing_idx,
-                    serializables->things[serializables->controlled_thing_idx].x, serializables->things[serializables->controlled_thing_idx].y);
-            platform->debug_log(debug_buff);
-            break;
-        case 's':
-            serializables->things[serializables->controlled_thing_idx].y += mov_speed;
-            audio_push_sample(ephemerals->audio_samples[serializables->controlled_thing_idx], ephemerals->audio_sample_length);
-            snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", serializables->controlled_thing_idx,
-                    serializables->things[serializables->controlled_thing_idx].x, serializables->things[serializables->controlled_thing_idx].y);
-            platform->debug_log(debug_buff);
-            break;
-        case 'd':
-            serializables->things[serializables->controlled_thing_idx].x += mov_speed;
-            audio_push_sample(ephemerals->audio_samples[serializables->controlled_thing_idx], ephemerals->audio_sample_length);
-            snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", serializables->controlled_thing_idx,
-                    serializables->things[serializables->controlled_thing_idx].x, serializables->things[serializables->controlled_thing_idx].y);
-            platform->debug_log(debug_buff);
-            break;
-        case 'q':
-            serializables->controlled_thing_idx = serializables->controlled_thing_idx == 0 ? 1 : 0;
-            break;
-        case '1':
-            platform->storage_load_state("test_save");
-            break;
-        case '!':
-            platform->storage_save_state("test_save");
-            break;
-        default:
-            break;
-    }
+    input_process_all(platform, serializables, ephemerals);
 
     gfx_clear_buffer();
     gfx_draw_texture((Texture_t *)(ephemerals->scratch.buff+serializables->things[0].texture_idx), serializables->things[0].x, serializables->things[0].y);

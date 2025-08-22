@@ -55,10 +55,10 @@ static void set_audio(PaStream *stream, bool active)
 void audio_init(PlatformSettings_t *settings, FloatRing_t **audio_buffer_pptr)
 {
     /// init audio buffer
-    *audio_buffer_pptr = (FloatRing_t *)malloc(sizeof(FloatRing_t) + (sizeof(float) * settings->audio_buffer_size));
+    *audio_buffer_pptr = (FloatRing_t *)malloc(sizeof(FloatRing_t) + (sizeof(float) * settings->audio_buffer_capacity));
     FloatRing_t *audio_buffer = (FloatRing_t *)*audio_buffer_pptr;
     memset(audio_buffer, 0, sizeof(*audio_buffer));
-    audio_buffer->capacity = settings->audio_buffer_size;
+    audio_buffer->capacity = settings->audio_buffer_capacity;
 
     /// init portaudio
     PaError err;

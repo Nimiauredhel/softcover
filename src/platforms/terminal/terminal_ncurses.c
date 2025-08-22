@@ -117,8 +117,26 @@ uint8_t gfx_rgb_to_color_pair(uint8_t r, uint8_t g, uint8_t b)
 
 char input_read(void)
 {
-    char c = wgetch(main_window);
-    return c;
+    if (ncurses_is_initialized)
+    {
+        return wgetch(main_window);
+    }
+    else
+    {
+        return fgetc(stdin);
+    }
+}
+
+void input_push_to_buffer(PlatformSettings_t *settings, ByteRing_t *input_buffer)
+{
+    char c = '~';
+
+    for (uint8_t i = 0; i < 8; i++)
+    {
+        c = input_read();
+        if (c == '~') continue;
+        byte_ring_push(input_buffer, (uint8_t *)&c, 1);
+    }
 }
 
 void gfx_sync_buffer(Texture_t *gfx_buffer)
@@ -249,6 +267,16 @@ void debug_init(void)
 {
     debug_ring.head = 0;
     debug_ring.len = 0;
+}
+
+void input_init(PlatformSettings_t *settings, ByteRing_t **input_buffer_pptr)
+{
+    /// init input buffer
+    *input_buffer_pptr = (ByteRing_t *)malloc(sizeof(ByteRing_t) +
+    settings->input_buffer_capacity);
+    ByteRing_t *input_buffer = (ByteRing_t *)*input_buffer_pptr;
+    memset(input_buffer, 0, sizeof(*input_buffer));
+    input_buffer->capacity = settings->input_buffer_capacity;
 }
 
 void gfx_init(PlatformSettings_t *settings, Texture_t **gfx_buffer_pptr)

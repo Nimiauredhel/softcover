@@ -57,7 +57,9 @@ static const PlatformCapabilities_t capabilities =
 
     .gfx_frame_time_min_us = 8000,
 
-    .audio_buffer_size_max = 65534,
+    .audio_buffer_capacity_max = 65534,
+
+    .input_buffer_capacity_max = 1024,
 };
 
 static const PlatformSettings_t default_settings =
@@ -71,7 +73,9 @@ static const PlatformSettings_t default_settings =
 
     .gfx_frame_time_target_us = capabilities.gfx_frame_time_min_us*2,
 
-    .audio_buffer_size = 16384,
+    .audio_buffer_capacity = 16384,
+
+    .input_buffer_capacity = 128,
 };
 
 static PlatformSettings_t platform_settings = default_settings;
@@ -80,8 +84,6 @@ static const Platform_t platform =
 {
     .capabilities = &capabilities,
     .settings = &platform_settings,
-
-    .input_read = input_read,
 
     .gfx_load_texture = gfx_load_texture,
     .storage_save_state = storage_save_state,
@@ -253,6 +255,7 @@ int main(int argc, char **argv)
     /// initializing platform modules according to given settings
     audio_init(&platform_settings, &app_memory.audio_buffer);
     gfx_init(&platform_settings, &app_memory.gfx_buffer);
+    input_init(&platform_settings, &app_memory.input_buffer);
 
     if (app_init != NULL)
     {
@@ -285,6 +288,8 @@ int main(int argc, char **argv)
             debug_log("App modification detected.\n");
             load_app();
         }
+
+        input_push_to_buffer(&platform_settings, app_memory.input_buffer);
 
         usleep(platform_settings.gfx_frame_time_target_us);
     }

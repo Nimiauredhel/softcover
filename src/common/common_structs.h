@@ -3,9 +3,11 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef struct Memory Memory_t;
 typedef struct Texture Texture_t;
+typedef struct ByteRing ByteRing_t;
 typedef struct FloatRing FloatRing_t;
 
 struct Memory
@@ -22,6 +24,14 @@ struct Texture
     uint8_t pixels[];
 };
 
+struct ByteRing
+{
+    uint16_t capacity;
+    uint16_t length;
+    uint16_t head;
+    uint8_t buffer[];
+};
+
 struct FloatRing
 {
     uint16_t capacity;
@@ -30,6 +40,9 @@ struct FloatRing
     float buffer[];
 };
 
+void byte_ring_push(ByteRing_t *ring, uint8_t *chunk, uint16_t len);
+bool byte_ring_pop(ByteRing_t *ring, uint8_t *out);
 void float_ring_push(FloatRing_t *ring, float *chunk, uint16_t len);
+bool float_ring_pop(FloatRing_t *ring, float *out);
 
 #endif

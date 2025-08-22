@@ -29,7 +29,9 @@ struct PlatformCapabilities
 
     useconds_t gfx_frame_time_min_us;
 
-    uint16_t audio_buffer_size_max;
+    uint16_t audio_buffer_capacity_max;
+
+    uint16_t input_buffer_capacity_max;
 };
 
 struct PlatformSettings
@@ -43,7 +45,9 @@ struct PlatformSettings
 
     useconds_t gfx_frame_time_target_us;
 
-    uint16_t audio_buffer_size;
+    uint16_t audio_buffer_capacity;
+
+    uint16_t input_buffer_capacity;
 };
 
 struct Platform
@@ -51,8 +55,6 @@ struct Platform
     // configuration
     const PlatformCapabilities_t *capabilities;
     PlatformSettings_t *settings;
-    // input
-    char (*input_read)(void);
     // storage
     void (*gfx_load_texture)(char *name, Texture_t *dest);
     void (*storage_save_state)(char *state_name);
@@ -69,6 +71,8 @@ struct AppMemoryPartition
 {
     Memory_t *serializable;
     Memory_t *ephemeral;
+
+    ByteRing_t *input_buffer;
     Texture_t *gfx_buffer;
     FloatRing_t *audio_buffer;
 };
