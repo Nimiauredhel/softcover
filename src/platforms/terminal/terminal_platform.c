@@ -312,16 +312,17 @@ platform_termination:
 
     if (app_exit != NULL) app_exit(&platform);
 
+    audio_deinit();
+    gfx_deinit();
+
     memory_release(&app_memory.serializable);
     memory_release(&app_memory.ephemeral);
+
     free(app_memory.gfx_buffer);
     free(app_memory.audio_buffer);
 
     debug_log("Program halted, press ENTER to quit.");
     debug_break();
-
-    audio_deinit();
-    gfx_deinit();
 
     return EXIT_SUCCESS;
 }
