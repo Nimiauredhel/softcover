@@ -206,6 +206,23 @@ void gfx_audio_vis(const FloatRing_t *audio_buffer)
 {
     werase(audiovis_window);
 
+    float max_val = 0.0f;
+    float min_val = 0.0f;
+    float max_abs_val = 0.0f;
+
+    for(uint16_t i = 0; i < audio_buffer->capacity; i++)
+    {
+        if (audio_buffer->buffer[i] > max_val) max_val = audio_buffer->buffer[i];
+        else if (audio_buffer->buffer[i] < min_val) min_val = audio_buffer->buffer[i];
+    }
+
+    max_abs_val = max_val;
+    if (min_val < 0.0f && min_val * -1.0f > max_val) max_abs_val = min_val * -1.0f;
+
+    float norm = ((float)audiovis_mid_row * 0.5f) / max_abs_val;
+
+    mvwprintw(audiovis_window, 0, 0, "Min: %f Max: %f", min_val, max_val);
+
     uint16_t frames_per_column = (audio_buffer->capacity / 2) / audiovis_width;
     uint16_t count = 0; 
     bool silence = false;
@@ -243,16 +260,16 @@ void gfx_audio_vis(const FloatRing_t *audio_buffer)
 
         for (int8_t j = 0; j < 2; j++)
         {
-            float value = frame_sums_stereo[j] / (frames_per_column * 0.5f);
+            float value = norm * (frame_sums_stereo[j] / (frames_per_column * 0.5f));
             float dir = value > 0.0f ? 1.0f : -1.0f;
             
-            int max_val_abs = audiovis_mid_row * value * dir;
+            int max_height_abs = audiovis_mid_row * value * dir;
             int color_pair = silence ? COLOR_PAIR_BG_BLUE
                 : value > 0.0f ? COLOR_PAIR_BG_GREEN : COLOR_PAIR_BG_RED;
 
             wattron(audiovis_window, COLOR_PAIR(color_pair));
 
-            for (int k = 1; k <= max_val_abs; k++)
+            for (int k = 1; k <= max_height_abs; k++)
             {
                 mvwaddch(audiovis_window, (audiovis_mid_row * (1 + (2*j)))+(k*dir*-1), i, ' ');
             }
