@@ -123,5 +123,9 @@ void gfx_load_texture(char *name, Texture_t *dest)
         }
 
         free(temp_buff);
+
+        snprintf(debug_buff, sizeof(debug_buff), "Loaded %s (%dx%dx%d).",
+            name, dest->width, dest->height, dest->pixel_size_bytes);
+        debug_log(debug_buff);
     }
 }

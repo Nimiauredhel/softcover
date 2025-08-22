@@ -163,6 +163,14 @@ static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y)
             uint16_t texture_idx = texture->pixel_size_bytes * (texture_x + (texture_y * texture->width));
             uint16_t buffer_idx = app->gfx_buffer->pixel_size_bytes * (pixel_x + (pixel_y * app->gfx_buffer->width));
 
+            /// extremely dumb alpha test
+            /// TODO: somehow move this responsibility to the platform side
+            if ((texture->pixel_size_bytes == 1 && texture->pixels[texture_idx] > 64)
+             || (texture->pixel_size_bytes == 4 && texture->pixels[texture_idx+3] == 0))
+            {
+                continue;
+            }
+
             for (uint8_t i = 0; i < app->gfx_buffer->pixel_size_bytes; i++)
             {
                 app->gfx_buffer->pixels[buffer_idx+i] = texture->pixels[texture_idx+i];

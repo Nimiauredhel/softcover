@@ -66,6 +66,7 @@ uint8_t gfx_rgb_to_color_pair(uint8_t r, uint8_t g, uint8_t b)
 {
     uint16_t sum = r + g + b;
 
+    if (sum == 0) return 128; // fake alpha
     if (sum < 32) return COLOR_PAIR_BG_BLACK;
     if (sum > 720) return COLOR_PAIR_BG_WHITE;
 
