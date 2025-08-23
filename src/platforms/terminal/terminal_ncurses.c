@@ -1,5 +1,7 @@
 #include "terminal_ncurses.h"
 #include "terminal_utils.h"
+#include "terminal_debug.h"
+#include "terminal_time.h"
 
 #include <string.h>
 
@@ -16,39 +18,26 @@ static WINDOW *audiovis_window = NULL;
 #define COLOR_PAIR_BG_CYAN (6)
 #define COLOR_PAIR_BG_WHITE (7)
 
-#define DEBUG_RING_CAPACITY (10)
-#define DEBUG_MESSAGE_MAX_LEN (128)
-
-typedef struct DebugRing
-{
-    uint8_t head;
-    uint8_t len;
-    char debug_messages[DEBUG_RING_CAPACITY][DEBUG_MESSAGE_MAX_LEN];
-} DebugRing_t;
-
 static bool ncurses_is_initialized = false;
-
-static bool debug_is_break = false;
-static DebugRing_t debug_ring = {0};
 
 static uint8_t audiovis_width;
 static uint8_t audiovis_height;
 static int audiovis_mid_row;
 
-static void debug_refresh_window(void)
+void gfx_refresh_debug_window(DebugRing_t *debug_ring, bool is_break)
 {
     werase(debug_window);
 
     wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
-    mvwprintw(debug_window, 0, 0, "%s", debug_is_break ? "BREAK - c to continue" : "DEBUG");
+    mvwprintw(debug_window, 0, 0, "%s", is_break ? "BREAK - c to continue" : "DEBUG");
     wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
 
-    uint8_t idx = debug_ring.head;
+    uint8_t idx = debug_ring->head;
 
-    for (uint8_t i = 0; i < debug_ring.len; i++)
+    for (uint8_t i = 0; i < debug_ring->len; i++)
     {
         wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BG_BLACK));
-        mvwprintw(debug_window, i, 8, "[%u]%u: %s", idx, i, debug_ring.debug_messages[idx]);
+        mvwprintw(debug_window, i, 8, "[%u]%u: %s", idx, i, debug_ring->debug_messages[idx]);
         wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
 
         idx++;
@@ -156,50 +145,10 @@ void gfx_sync_buffer(Texture_t *gfx_buffer)
         }
     }
 
+    float fps = 1000000.0f / time_get_delta_us();
+    mvwprintw(main_window, 0, 0, "%.2f fps\n", fps);
+
     wrefresh(main_window);
-}
-
-void debug_log(char *message)
-{
-    uint8_t idx = debug_ring.head + debug_ring.len % DEBUG_RING_CAPACITY;
-    snprintf(debug_ring.debug_messages[idx], DEBUG_MESSAGE_MAX_LEN, "%s", message);
-
-    if (debug_ring.len < DEBUG_RING_CAPACITY)
-    {
-        debug_ring.len++;
-    }
-    else
-    {
-        debug_ring.head++;
-        if (debug_ring.head >= DEBUG_RING_CAPACITY) debug_ring.head = 0;
-    }
-
-    if (ncurses_is_initialized)
-    {
-        debug_refresh_window();
-    }
-    else
-    {
-        printf("DEBUG: %s\n", message);
-    }
-}
-
-void debug_break(void)
-{
-    if (ncurses_is_initialized)
-    {
-        debug_is_break = true;
-        debug_refresh_window();
-    }
-
-    char c = '~';
-
-    while(c != '\n')
-    {
-        c = ncurses_is_initialized ? input_read() : fgetc(stdin);
-    }
-
-    debug_is_break = false;
 }
 
 void gfx_audio_vis(const FloatRing_t *audio_buffer)
@@ -281,12 +230,6 @@ void gfx_audio_vis(const FloatRing_t *audio_buffer)
     wrefresh(audiovis_window);
 }
 
-void debug_init(void)
-{
-    debug_ring.head = 0;
-    debug_ring.len = 0;
-}
-
 void input_init(PlatformSettings_t *settings, ByteRing_t **input_buffer_pptr)
 {
     /// init input buffer
@@ -295,6 +238,11 @@ void input_init(PlatformSettings_t *settings, ByteRing_t **input_buffer_pptr)
     ByteRing_t *input_buffer = (ByteRing_t *)*input_buffer_pptr;
     memset(input_buffer, 0, sizeof(*input_buffer));
     input_buffer->capacity = settings->input_buffer_capacity;
+}
+
+bool gfx_is_initialized(void)
+{
+    return ncurses_is_initialized;
 }
 
 void gfx_init(PlatformSettings_t *settings, Texture_t **gfx_buffer_pptr)

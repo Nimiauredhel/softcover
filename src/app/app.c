@@ -39,24 +39,41 @@ typedef struct AppSerializables
 
 typedef struct AppEphemera
 {
+    char debug_buff[128];
     uint16_t things_draw_order[APP_THINGS_COUNT];
     AppScratch_t scratch;
 } AppEphemeral_t;
 
+static const Platform_t *platform = NULL;
 static AppMemoryPartition_t *app = NULL;
+static AppSerializable_t *serializables = NULL;
+static AppEphemeral_t *ephemerals = NULL;
 
+static void move_thing(uint16_t thing_idx, int16_t x_delta, int16_t y_delta);
 static char input_read_from_buffer(ByteRing_t *input_buffer);
-static void input_process_all(const Platform_t *platform, AppSerializable_t *serializables, AppEphemeral_t *ephemerals);
-static size_t load_texture_to_scratch(char *name, const Platform_t *platform, AppScratch_t *scratch);
-static size_t load_wav_to_scratch(char *name, const Platform_t *platform, AppScratch_t *scratch);
+static void input_process_all(void);
+static size_t load_texture_to_scratch(char *name);
+static size_t load_wav_to_scratch(char *name);
 static void audio_push_samples(float *samples, uint32_t len);
 static void audio_push_clip(AudioClip_t *clip);
 static void gfx_clear_buffer(void);
 static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y);
+static void gfx_draw_thing(uint16_t thing_idx);
+static void gfx_draw_all(void);
+
+static void move_thing(uint16_t thing_idx, int16_t x_delta, int16_t y_delta)
+{
+    serializables->things[thing_idx].x_pos += x_delta;
+    serializables->things[thing_idx].y_pos += y_delta;
+    audio_push_clip((AudioClip_t *)(ephemerals->scratch.buff+serializables->things[thing_idx].move_sfx_idx));
+    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Thing %d moved to [%d,%d]", thing_idx,
+            serializables->things[thing_idx].x_pos, serializables->things[thing_idx].y_pos);
+    platform->debug_log(ephemerals->debug_buff);
+}
 
 static char input_read_from_buffer(ByteRing_t *input_buffer)
 {
-    if (app == NULL || app->serializable == NULL) return '~';
+    if (app == NULL || serializables == NULL) return '~';
 
     char c = '~';
 
@@ -64,11 +81,9 @@ static char input_read_from_buffer(ByteRing_t *input_buffer)
     return '~';
 }
 
-static void input_process_all(const Platform_t *platform, AppSerializable_t *serializables, AppEphemeral_t *ephemerals)
+static void input_process_all(void)
 {
-    static char debug_buff[128] = {0};
-
-    if (app == NULL || app->serializable == NULL) return;
+    if (platform == NULL || serializables == NULL) return;
 
     char input = '~';
 
@@ -79,32 +94,16 @@ static void input_process_all(const Platform_t *platform, AppSerializable_t *ser
         switch (input)
         {
             case 'w':
-                serializables->things[serializables->controlled_thing_idx].y_pos -= serializables->mov_speed;
-                audio_push_clip((AudioClip_t *)(ephemerals->scratch.buff+serializables->things[serializables->controlled_thing_idx].move_sfx_idx));
-                snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", serializables->controlled_thing_idx,
-                        serializables->things[serializables->controlled_thing_idx].x_pos, serializables->things[serializables->controlled_thing_idx].y_pos);
-                platform->debug_log(debug_buff);
+                move_thing(serializables->controlled_thing_idx, 0, -serializables->mov_speed);
                 break;
             case 'a':
-                serializables->things[serializables->controlled_thing_idx].x_pos -= serializables->mov_speed;
-                audio_push_clip((AudioClip_t *)(ephemerals->scratch.buff+serializables->things[serializables->controlled_thing_idx].move_sfx_idx));
-                snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", serializables->controlled_thing_idx,
-                        serializables->things[serializables->controlled_thing_idx].x_pos, serializables->things[serializables->controlled_thing_idx].y_pos);
-                platform->debug_log(debug_buff);
+                move_thing(serializables->controlled_thing_idx, -serializables->mov_speed, 0);
                 break;
             case 's':
-                serializables->things[serializables->controlled_thing_idx].y_pos += serializables->mov_speed;
-                audio_push_clip((AudioClip_t *)(ephemerals->scratch.buff+serializables->things[serializables->controlled_thing_idx].move_sfx_idx));
-                snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", serializables->controlled_thing_idx,
-                        serializables->things[serializables->controlled_thing_idx].x_pos, serializables->things[serializables->controlled_thing_idx].y_pos);
-                platform->debug_log(debug_buff);
+                move_thing(serializables->controlled_thing_idx, 0, serializables->mov_speed);
                 break;
             case 'd':
-                serializables->things[serializables->controlled_thing_idx].x_pos += serializables->mov_speed;
-                audio_push_clip((AudioClip_t *)(ephemerals->scratch.buff+serializables->things[serializables->controlled_thing_idx].move_sfx_idx));
-                snprintf(debug_buff, sizeof(debug_buff), "Thing %d moved to [%d,%d]", serializables->controlled_thing_idx,
-                        serializables->things[serializables->controlled_thing_idx].x_pos, serializables->things[serializables->controlled_thing_idx].y_pos);
-                platform->debug_log(debug_buff);
+                move_thing(serializables->controlled_thing_idx, serializables->mov_speed, 0);
                 break;
             case 'q':
                 serializables->controlled_thing_idx = serializables->controlled_thing_idx == 0 ? 1 : 0;
@@ -123,33 +122,29 @@ static void input_process_all(const Platform_t *platform, AppSerializable_t *ser
 
 }
 
-static size_t load_texture_to_scratch(char *name, const Platform_t *platform, AppScratch_t *scratch)
+static size_t load_texture_to_scratch(char *name)
 {
-    static char debug_buff[128] = {0};
+    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Loading texture '%s' to scratch memory.", name);
+    platform->debug_log(ephemerals->debug_buff);
 
-    snprintf(debug_buff, sizeof(debug_buff), "Loading texture '%s' to scratch memory.", name);
-    platform->debug_log(debug_buff);
-
-    size_t index = scratch->used;
-    Texture_t *texture_ptr = (Texture_t *)(scratch->buff+index);
+    size_t index = ephemerals->scratch.used;
+    Texture_t *texture_ptr = (Texture_t *)(ephemerals->scratch.buff+index);
     platform->gfx_load_texture(name, texture_ptr);
     size_t size = sizeof(Texture_t) + (texture_ptr->height * texture_ptr->width * texture_ptr->pixel_size_bytes);
-    scratch->used += size;
+    ephemerals->scratch.used += size;
     return index;
 }
 
-static size_t load_wav_to_scratch(char *name, const Platform_t *platform, AppScratch_t *scratch)
+static size_t load_wav_to_scratch(char *name)
 {
-    static char debug_buff[128] = {0};
+    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Loading wav '%s' to scratch memory.", name);
+    platform->debug_log(ephemerals->debug_buff);
 
-    snprintf(debug_buff, sizeof(debug_buff), "Loading wav '%s' to scratch memory.", name);
-    platform->debug_log(debug_buff);
-
-    size_t index = scratch->used;
-    AudioClip_t *clip_ptr = (AudioClip_t *)(scratch->buff+index);
+    size_t index = ephemerals->scratch.used;
+    AudioClip_t *clip_ptr = (AudioClip_t *)(ephemerals->scratch.buff+index);
     platform->audio_load_wav(name, clip_ptr);
     size_t size = sizeof(AudioClip_t) + (sizeof(float) * clip_ptr->num_samples);
-    scratch->used += size;
+    ephemerals->scratch.used += size;
     return index;
 }
 
@@ -207,7 +202,7 @@ static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y)
     }
 }
 
-static void gfx_sort_things(AppSerializable_t *serializables, AppEphemeral_t *ephemerals)
+static void gfx_sort_things_draw_order(void)
 {
     uint16_t temp;
     bool swapped = false;
@@ -231,26 +226,31 @@ static void gfx_sort_things(AppSerializable_t *serializables, AppEphemeral_t *ep
     }
 }
 
-static void gfx_draw_all(AppSerializable_t *serializables, AppEphemeral_t *ephemerals)
+static void gfx_draw_thing(uint16_t thing_idx)
 {
-    gfx_sort_things(serializables, ephemerals);
+    gfx_draw_texture((Texture_t *)(ephemerals->scratch.buff+serializables->things[thing_idx].texture_idx),
+        serializables->things[thing_idx].x_pos - serializables->things[thing_idx].x_offset,
+        serializables->things[thing_idx].y_pos - serializables->things[thing_idx].y_offset);
+}
+
+static void gfx_draw_all(void)
+{
+    gfx_sort_things_draw_order();
 
     for (uint16_t i = 0; i < serializables->things_count; i++)
     {
-        uint16_t thing_idx = ephemerals->things_draw_order[i];
-
-        gfx_draw_texture((Texture_t *)(ephemerals->scratch.buff+serializables->things[thing_idx].texture_idx),
-            serializables->things[thing_idx].x_pos - serializables->things[thing_idx].x_offset,
-            serializables->things[thing_idx].y_pos - serializables->things[thing_idx].y_offset);
+        gfx_draw_thing(ephemerals->things_draw_order[i]);
     }
 }
 
 /// must match prototype @ref AppSetupFunc
-void app_setup(Platform_t *platform)
+void app_setup(Platform_t *interface)
 {
     static char debug_buff[128] = {0};
 
-    platform->settings->gfx_frame_time_target_us = 16000;
+    platform = interface;
+
+    platform->settings->gfx_frame_time_target_us = 16666;
 
     platform->settings->gfx_pixel_size_bytes = 1;
     platform->settings->gfx_buffer_width = 160;
@@ -293,8 +293,10 @@ void app_setup(Platform_t *platform)
  * TODO: also call after serializable state is loaded, or following an executable hot-reload.
  * Must match prototype @ref AppInitFunc.
  */
-void app_init(const Platform_t *platform, AppMemoryPartition_t *memory)
+void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
 {
+    platform = interface;
+
     platform->debug_log("App initializing fresh memory partition.");
 
     if (memory == NULL)
@@ -305,16 +307,15 @@ void app_init(const Platform_t *platform, AppMemoryPartition_t *memory)
     }
 
     app = memory;
+    ephemerals = (AppEphemeral_t *)app->ephemeral->buffer;
+    serializables = (AppSerializable_t *)app->serializable->buffer;
 
     /// EPHEMERALS
     platform->debug_log("Initializing app ephemeral state.");
 
-    AppEphemeral_t *ephemerals = (AppEphemeral_t *)app->ephemeral->buffer;
-
     ephemerals->scratch.used = 0;
 
     /// SERIALIZABLES
-    AppSerializable_t *serializables = (AppSerializable_t *)app->serializable->buffer;
 
     if (serializables->initialized)
     {
@@ -326,21 +327,21 @@ void app_init(const Platform_t *platform, AppMemoryPartition_t *memory)
 
         serializables->things_count = APP_THINGS_COUNT;
 
-        serializables->things[0].texture_idx = load_texture_to_scratch("thing1.bmp", platform, &ephemerals->scratch);
-        serializables->things[0].move_sfx_idx = load_wav_to_scratch("sfx01.wav", platform, &ephemerals->scratch);
+        serializables->things[0].texture_idx = load_texture_to_scratch("thing1.bmp");
+        serializables->things[0].move_sfx_idx = load_wav_to_scratch("sfx01.wav");
         serializables->things[0].x_pos = 0;
         serializables->things[0].y_pos = 1;
         serializables->things[0].x_offset = 3;
         serializables->things[0].y_offset = 7;
 
-        serializables->things[1].texture_idx = load_texture_to_scratch("thing2.bmp", platform, &ephemerals->scratch);
-        serializables->things[1].move_sfx_idx = load_wav_to_scratch("sfx02.wav", platform, &ephemerals->scratch);
+        serializables->things[1].texture_idx = load_texture_to_scratch("thing2.bmp");
+        serializables->things[1].move_sfx_idx = load_wav_to_scratch("sfx02.wav");
         serializables->things[1].x_pos = 5;
         serializables->things[1].y_pos = 4;
         serializables->things[1].x_offset = 3;
         serializables->things[1].y_offset = 7;
 
-        size_t apple_texture_idx = load_texture_to_scratch("apple.bmp", platform, &ephemerals->scratch);
+        size_t apple_texture_idx = load_texture_to_scratch("apple.bmp");
 
         for (uint16_t i = 2; i < serializables->things_count; i++)
         {
@@ -366,18 +367,14 @@ void app_init(const Platform_t *platform, AppMemoryPartition_t *memory)
 }
 
 /// must match prototype @ref AppLoopFunc
-void app_loop(const Platform_t *platform)
+void app_loop(void)
 {
-    AppSerializable_t *serializables = (AppSerializable_t *)app->serializable->buffer;
-    AppEphemeral_t *ephemerals = (AppEphemeral_t *)app->ephemeral->buffer;
-
-    input_process_all(platform, serializables, ephemerals);
-
+    input_process_all();
     gfx_clear_buffer();
-    gfx_draw_all(serializables, ephemerals);
+    gfx_draw_all();
 }
 
 /// must match prototype @ref AppExitFunc
-void app_exit(const Platform_t *platform)
+void app_exit(void)
 {
 }

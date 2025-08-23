@@ -10,6 +10,7 @@
 #include "common_interface.h"
 #include "common_structs.h"
 
+#include "terminal_time.h"
 #include "terminal_utils.h"
 #include "terminal_ncurses.h"
 #include "terminal_portaudio.h"
@@ -18,6 +19,7 @@
 #define LIB_NAME ""
 #endif
 
+int64_t time_get_delta_us(void);
 Memory_t* memory_allocate(size_t size);
 void memory_release(Memory_t **memory_pptr);
 void storage_save_state(char *state_name);
@@ -28,6 +30,8 @@ void set_should_terminate(bool value);
 static const char *state_filename_format = "%s.state";
 
 static char lib_path[256] = LIB_NAME;
+
+static char platform_top_debug_buff[256];
 
 static time_t lib_load_time = {0};
 static time_t lib_modified_time = {0};
@@ -56,7 +60,7 @@ static const PlatformCapabilities_t capabilities =
     .gfx_buffer_height_max = 32,
     .gfx_pixel_max_bytes = 1,
 
-    .gfx_frame_time_min_us = 8000,
+    .gfx_frame_time_min_us = 8333,
 
     .audio_buffer_capacity_max = 65534,
 
@@ -86,6 +90,7 @@ static const Platform_t platform =
     .capabilities = &capabilities,
     .settings = &platform_settings,
 
+    .time_get_delta_us = time_get_delta_us,
     .gfx_load_texture = gfx_load_texture,
     .audio_load_wav = audio_load_wav,
     .storage_save_state = storage_save_state,
@@ -124,23 +129,21 @@ void memory_release(Memory_t **memory_pptr)
 
 void storage_save_state(char *state_name)
 {
-    static char debug_buff[128] = {0};
-
     char file_name[256] = {0};
     FILE *file = NULL;
 
     snprintf(file_name, sizeof(file_name), state_filename_format, state_name);
 
-    snprintf(debug_buff, sizeof(debug_buff), "Saving '%s'.", file_name);
-    debug_log(debug_buff);
+    snprintf(platform_top_debug_buff, sizeof(platform_top_debug_buff), "Saving '%s'.", file_name);
+    debug_log(platform_top_debug_buff);
 
     file = fopen(file_name, "wb");
 
     if (file == NULL)
     {
         int err = errno;
-        snprintf(debug_buff, sizeof(debug_buff), "Failed to save '%s': %s", file_name, strerror(err));
-        debug_log(debug_buff);
+        snprintf(platform_top_debug_buff, sizeof(platform_top_debug_buff), "Failed to save '%s': %s", file_name, strerror(err));
+        debug_log(platform_top_debug_buff);
         return;
     }
     
@@ -150,24 +153,22 @@ void storage_save_state(char *state_name)
 
 void storage_load_state(char *state_name)
 {
-    static char debug_buff[128] = {0};
-
     char file_name[256] = {0};
     size_t file_size = 0;
     FILE *file = NULL;
 
     snprintf(file_name, sizeof(file_name), state_filename_format, state_name);
 
-    snprintf(debug_buff, sizeof(debug_buff), "Loading '%s'.", file_name);
-    debug_log(debug_buff);
+    snprintf(platform_top_debug_buff, sizeof(platform_top_debug_buff), "Loading '%s'.", file_name);
+    debug_log(platform_top_debug_buff);
 
     file = fopen(file_name, "rb");
 
     if (file == NULL)
     {
         int err = errno;
-        snprintf(debug_buff, sizeof(debug_buff), "Failed to load '%s': %s", file_name, strerror(err));
-        debug_log(debug_buff);
+        snprintf(platform_top_debug_buff, sizeof(platform_top_debug_buff), "Failed to load '%s': %s", file_name, strerror(err));
+        debug_log(platform_top_debug_buff);
         return;
     }
 
@@ -198,8 +199,6 @@ void set_should_terminate(bool value)
 
 static void load_app(void)
 {
-    static char debug_buff[128] = {0};
-
     debug_log("Loading app layer.\n");
 
     if (lib_handle != NULL)
@@ -214,8 +213,8 @@ static void load_app(void)
 
     if (lib_handle == NULL )
     {
-        snprintf(debug_buff, sizeof(debug_buff), "Failed to load [%s]: %s\n", lib_path, dlerror());
-        debug_log(debug_buff);
+        snprintf(platform_top_debug_buff, sizeof(platform_top_debug_buff), "Failed to load [%s]: %s\n", lib_path, dlerror());
+        debug_log(platform_top_debug_buff);
         should_terminate = true;
         return;
     }
@@ -234,7 +233,6 @@ int main(int argc, char **argv)
 {
 #define TERMINATION_POINT if (should_terminate) goto platform_termination
 
-    static char debug_buff[128] = {0};
     static struct stat file_stat = {0};
 
     debug_init();
@@ -245,13 +243,13 @@ int main(int argc, char **argv)
     if (argc > 1)
     {
         snprintf(lib_path, sizeof(lib_path), "%s", argv[1]);
-        snprintf(debug_buff, sizeof(debug_buff), "Using given library path: %s.\n", lib_path);
-        debug_log(debug_buff);
+        snprintf(platform_top_debug_buff, sizeof(platform_top_debug_buff), "Using given library path: %s.\n", lib_path);
+        debug_log(platform_top_debug_buff);
     }
     else
     {
-        snprintf(debug_buff, sizeof(debug_buff), "Using default library path: %s.\n", lib_path);
-        debug_log(debug_buff);
+        snprintf(platform_top_debug_buff, sizeof(platform_top_debug_buff), "Using default library path: %s.\n", lib_path);
+        debug_log(platform_top_debug_buff);
     }
 
     load_app();
@@ -283,9 +281,11 @@ int main(int argc, char **argv)
 
     while(!should_terminate)
     {
+        time_mark_cycle_start();
+
         if (app_loop != NULL)
         {
-            app_loop(&platform);
+            app_loop();
         }
         else
         {
@@ -305,12 +305,19 @@ int main(int argc, char **argv)
 
         input_push_to_buffer(&platform_settings, app_memory.input_buffer);
 
-        usleep(platform_settings.gfx_frame_time_target_us);
+        time_mark_cycle_end(platform_settings.gfx_frame_time_target_us);
+        int64_t last_cycle_leftover_us = time_get_leftover_us();
+
+        if (last_cycle_leftover_us > 0)
+        {
+            usleep(last_cycle_leftover_us);
+            time_mark_cycle_end(platform_settings.gfx_frame_time_target_us);
+        }
     }
 
 platform_termination:
 
-    if (app_exit != NULL) app_exit(&platform);
+    if (app_exit != NULL) app_exit();
 
     audio_deinit();
     gfx_deinit();

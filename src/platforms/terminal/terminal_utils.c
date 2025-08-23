@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <time.h>
 
 #define LOADBMP_IMPLEMENTATION
 #include "loadbmp.h"
@@ -75,18 +76,6 @@ int random_range(int min, int max)
     int random_number = rand();
     random_number = (random_number % (max - min + 1)) + min;
     return random_number;
-}
-
-/**
- * @brief Returns the seconds elapsed since a given clock value.
- */
-float seconds_since_clock(struct timespec *start_clock)
-{
-    struct timespec now_clock;
-    clock_gettime(CLOCK_MONOTONIC, &now_clock);
-    float elapsed_float = (now_clock.tv_nsec - start_clock->tv_nsec) / 1000000000.0;
-    elapsed_float += (now_clock.tv_sec - start_clock->tv_sec);
-    return elapsed_float;
 }
 
 void gfx_load_texture(char *name, Texture_t *dest)

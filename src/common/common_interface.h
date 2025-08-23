@@ -13,10 +13,10 @@ typedef struct PlatformSettings PlatformSettings_t;
 
 typedef struct AppMemoryPartition AppMemoryPartition_t;
 
-typedef void (*AppSetupFunc)(const Platform_t *platform);
-typedef void (*AppInitFunc)(const Platform_t *platform, AppMemoryPartition_t *memory);
-typedef void (*AppLoopFunc)(const Platform_t *platform);
-typedef void (*AppExitFunc)(const Platform_t *platform);
+typedef void (*AppSetupFunc)(const Platform_t *interface);
+typedef void (*AppInitFunc)(const Platform_t *interface, AppMemoryPartition_t *memory);
+typedef void (*AppLoopFunc)(void);
+typedef void (*AppExitFunc)(void);
 
 struct PlatformCapabilities
 {
@@ -55,6 +55,8 @@ struct Platform
     // configuration
     const PlatformCapabilities_t *capabilities;
     PlatformSettings_t *settings;
+    // time
+    int64_t (*time_get_delta_us)(void);
     // storage
     void (*gfx_load_texture)(char *name, Texture_t *dest);
     void (*audio_load_wav)(char *name, AudioClip_t *dest);
