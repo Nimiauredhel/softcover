@@ -89,12 +89,20 @@ static const Platform_t platform =
     .capabilities = &capabilities,
     .settings = &platform_settings,
 
+    /// time
     .time_get_delta_us = time_get_delta_us,
+
+    /// audio
+    .audio_get_volume = audio_get_volume,
+    .audio_set_volume = audio_set_volume,
+
+    /// storage
     .gfx_load_texture = gfx_load_texture,
     .audio_load_wav = audio_load_wav,
     .storage_save_state = storage_save_state,
     .storage_load_state = storage_load_state,
 
+    /// utils
     .get_should_terminate = get_should_terminate,
     .set_should_terminate = set_should_terminate,
     .debug_log = debug_log,
@@ -291,7 +299,7 @@ int main(int argc, char **argv)
         }
 
         gfx_sync_buffer(app_memory.gfx_buffer);
-        gfx_audio_vis(app_memory.audio_buffer);
+        gfx_audio_vis(app_memory.audio_buffer, audio_get_volume());
 
         stat(lib_path, &file_stat);
         lib_modified_time = file_stat.st_mtime;

@@ -6,6 +6,7 @@
 #include "portaudio.h"
 
 static PaStream *audio_stream;
+static float audio_volume = 1.0f;
 
 static int paStreamCallback(const void *inputBuffer, void *outputBuffer, unsigned long framesPerBuffer,
                            const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void *userData)
@@ -26,7 +27,7 @@ static int paStreamCallback(const void *inputBuffer, void *outputBuffer, unsigne
             continue;
         }
 
-        out[i] = data->buffer[data->head];
+        out[i] = data->buffer[data->head] * audio_volume;
         data->head = data->head + 1;
         if (data->head >= data->capacity) data->head -= data->capacity;
         data->length--;
@@ -50,6 +51,17 @@ static void set_audio(PaStream *stream, bool active)
     {
         // TODO: handle error
     }
+}
+
+float audio_get_volume(void)
+{
+    return audio_volume;
+}
+
+void audio_set_volume(float value)
+{
+    if (value > 2.0f || value < 0.0f) return;
+    audio_volume = value;
 }
 
 void audio_init(PlatformSettings_t *settings, FloatRing_t **audio_buffer_pptr)

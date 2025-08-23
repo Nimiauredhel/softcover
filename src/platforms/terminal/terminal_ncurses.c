@@ -151,7 +151,7 @@ void gfx_sync_buffer(Texture_t *gfx_buffer)
     wrefresh(main_window);
 }
 
-void gfx_audio_vis(const FloatRing_t *audio_buffer)
+void gfx_audio_vis(const FloatRing_t *audio_buffer, float volume)
 {
     werase(audiovis_window);
 
@@ -225,6 +225,13 @@ void gfx_audio_vis(const FloatRing_t *audio_buffer)
 
             wattroff(audiovis_window, COLOR_PAIR(color_pair));
         }
+    }
+
+    for (uint16_t i = 0; i < (uint16_t)(audiovis_height * (volume * 0.5f)); i++)
+    {
+        wattron(audiovis_window, COLOR_PAIR(COLOR_PAIR_BG_MAGENTA));
+        mvwaddch(audiovis_window, audiovis_height - i, 0, ' ');
+        wattroff(audiovis_window, COLOR_PAIR(COLOR_PAIR_BG_MAGENTA));
     }
 
     wrefresh(audiovis_window);

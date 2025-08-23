@@ -57,6 +57,9 @@ struct Platform
     PlatformSettings_t *settings;
     // time
     int64_t (*time_get_delta_us)(void);
+    // audio
+    float (*audio_get_volume)(void);
+    void (*audio_set_volume)(float);
     // storage
     void (*gfx_load_texture)(char *name, Texture_t *dest);
     void (*audio_load_wav)(char *name, AudioClip_t *dest);

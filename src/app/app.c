@@ -110,6 +110,14 @@ static void input_process_all(void)
             case '!':
                 platform->storage_save_state("test_save");
                 break;
+            case '=':
+            case '+':
+                platform->audio_set_volume(platform->audio_get_volume() + 0.1f);
+                break;
+            case '-':
+            case '_':
+                platform->audio_set_volume(platform->audio_get_volume() - 0.1f);
+                break;
             default:
                 break;
         }
