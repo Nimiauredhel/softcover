@@ -19,6 +19,8 @@ typedef struct Thing
     int16_t y_pos;
     int16_t x_offset;
     int16_t y_offset;
+    uint16_t coll_width;
+    uint16_t coll_height;
 } Thing_t;
 
 typedef struct AppScratch
@@ -33,6 +35,7 @@ typedef struct AppSerializables
     uint16_t mov_speed;
     uint16_t things_count;
     uint16_t controlled_thing_idx;
+    uint16_t white_dot_idx;
     Thing_t things[APP_THINGS_COUNT];
     size_t audio_clip_indices[APP_CLIPS_COUNT];
 } AppSerializable_t;
@@ -40,7 +43,7 @@ typedef struct AppSerializables
 typedef struct AppEphemera
 {
     char debug_buff[128];
-    uint16_t things_draw_order[APP_THINGS_COUNT];
+    uint16_t things_vertical_order[APP_THINGS_COUNT];
     AppScratch_t scratch;
 } AppEphemeral_t;
 
@@ -49,27 +52,20 @@ static AppMemoryPartition_t *app = NULL;
 static AppSerializable_t *serializables = NULL;
 static AppEphemeral_t *ephemerals = NULL;
 
-static void move_thing(uint16_t thing_idx, int16_t x_delta, int16_t y_delta);
 static char input_read_from_buffer(ByteRing_t *input_buffer);
 static void input_process_all(void);
 static size_t load_texture_to_scratch(char *name);
 static size_t load_wav_to_scratch(char *name);
 static void audio_push_samples(float *samples, uint32_t len);
 static void audio_push_clip(AudioClip_t *clip);
+static void things_get_distance(uint16_t first_thing_id, uint16_t second_thing_id, int32_t *x_dist_out, int32_t *y_dist_out);
+static uint16_t thing_test_collision(uint16_t thing_id);
+static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta);
+static void things_sort_vertical_order(void);
 static void gfx_clear_buffer(void);
 static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y);
 static void gfx_draw_thing(uint16_t thing_idx);
-static void gfx_draw_all(void);
-
-static void move_thing(uint16_t thing_idx, int16_t x_delta, int16_t y_delta)
-{
-    serializables->things[thing_idx].x_pos += x_delta;
-    serializables->things[thing_idx].y_pos += y_delta;
-    audio_push_clip((AudioClip_t *)(ephemerals->scratch.buff+serializables->things[thing_idx].move_sfx_idx));
-    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Thing %d moved to [%d,%d]", thing_idx,
-            serializables->things[thing_idx].x_pos, serializables->things[thing_idx].y_pos);
-    platform->debug_log(ephemerals->debug_buff);
-}
+static void gfx_draw_all_things(void);
 
 static char input_read_from_buffer(ByteRing_t *input_buffer)
 {
@@ -94,16 +90,16 @@ static void input_process_all(void)
         switch (input)
         {
             case 'w':
-                move_thing(serializables->controlled_thing_idx, 0, -serializables->mov_speed);
+                thing_move(serializables->controlled_thing_idx, 0, -serializables->mov_speed);
                 break;
             case 'a':
-                move_thing(serializables->controlled_thing_idx, -serializables->mov_speed, 0);
+                thing_move(serializables->controlled_thing_idx, -serializables->mov_speed, 0);
                 break;
             case 's':
-                move_thing(serializables->controlled_thing_idx, 0, serializables->mov_speed);
+                thing_move(serializables->controlled_thing_idx, 0, serializables->mov_speed);
                 break;
             case 'd':
-                move_thing(serializables->controlled_thing_idx, serializables->mov_speed, 0);
+                thing_move(serializables->controlled_thing_idx, serializables->mov_speed, 0);
                 break;
             case 'q':
                 serializables->controlled_thing_idx = serializables->controlled_thing_idx == 0 ? 1 : 0;
@@ -159,6 +155,78 @@ static void audio_push_clip(AudioClip_t *clip)
     audio_push_samples(clip->samples, clip->num_samples);
 }
 
+static void things_sort_vertical_order(void)
+{
+    uint16_t temp;
+    bool swapped = false;
+
+    for (uint16_t end_idx = serializables->things_count-1; end_idx > 0; end_idx--)
+    {
+        swapped = false;
+
+        for (uint16_t i = 0; i < end_idx; i++)
+        {
+            if (serializables->things[ephemerals->things_vertical_order[i]].y_pos > serializables->things[ephemerals->things_vertical_order[i+1]].y_pos)
+            {
+                swapped = true;
+                temp = ephemerals->things_vertical_order[i];
+                ephemerals->things_vertical_order[i] = ephemerals->things_vertical_order[i+1];
+                ephemerals->things_vertical_order[i+1] = temp;
+            }
+        }
+
+        if (!swapped) break;
+    }
+}
+
+static void things_get_distance(uint16_t first_thing_id, uint16_t second_thing_id, int32_t *x_dist_out, int32_t *y_dist_out)
+{
+    *x_dist_out = serializables->things[first_thing_id].x_pos - serializables->things[second_thing_id].x_pos;
+    *y_dist_out = serializables->things[first_thing_id].y_pos - serializables->things[second_thing_id].y_pos;
+
+    if (*x_dist_out < 0) *x_dist_out *= -1;
+    if (*y_dist_out < 0) *y_dist_out *= -1;
+}
+
+static uint16_t thing_test_collision(uint16_t thing_id)
+{
+    int32_t dist_x;
+    int32_t dist_y;
+
+    for (uint16_t i = 0; i < serializables->things_count; i++)
+    {
+        if (i == thing_id) continue;
+
+        things_get_distance(thing_id, i, &dist_x, &dist_y);
+
+        if ((dist_x < (serializables->things[thing_id].coll_width + serializables->things[i].coll_width) / 2)
+         && (dist_y < (serializables->things[thing_id].coll_height + serializables->things[i].coll_height) / 2))
+        {
+            return i;
+        }
+    }
+
+    return thing_id;
+}
+
+static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta)
+{
+    serializables->things[thing_idx].x_pos += x_delta;
+    serializables->things[thing_idx].y_pos += y_delta;
+
+    if (thing_test_collision(thing_idx) != thing_idx)
+    {
+        serializables->things[thing_idx].x_pos -= x_delta;
+        serializables->things[thing_idx].y_pos -= y_delta;
+        return;
+    }
+
+    audio_push_clip((AudioClip_t *)(ephemerals->scratch.buff+serializables->things[thing_idx].move_sfx_idx));
+    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Thing %d moved to [%d,%d]", thing_idx,
+            serializables->things[thing_idx].x_pos, serializables->things[thing_idx].y_pos);
+    platform->debug_log(ephemerals->debug_buff);
+}
+
 static void gfx_clear_buffer(void)
 {
     if (app == NULL || app->gfx_buffer == NULL) return;
@@ -202,44 +270,23 @@ static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y)
     }
 }
 
-static void gfx_sort_things_draw_order(void)
-{
-    uint16_t temp;
-    bool swapped = false;
-
-    for (uint16_t end_idx = serializables->things_count-1; end_idx > 0; end_idx--)
-    {
-        swapped = false;
-
-        for (uint16_t i = 0; i < end_idx; i++)
-        {
-            if (serializables->things[ephemerals->things_draw_order[i]].y_pos > serializables->things[ephemerals->things_draw_order[i+1]].y_pos)
-            {
-                swapped = true;
-                temp = ephemerals->things_draw_order[i];
-                ephemerals->things_draw_order[i] = ephemerals->things_draw_order[i+1];
-                ephemerals->things_draw_order[i+1] = temp;
-            }
-        }
-
-        if (!swapped) break;
-    }
-}
-
 static void gfx_draw_thing(uint16_t thing_idx)
 {
     gfx_draw_texture((Texture_t *)(ephemerals->scratch.buff+serializables->things[thing_idx].texture_idx),
         serializables->things[thing_idx].x_pos - serializables->things[thing_idx].x_offset,
         serializables->things[thing_idx].y_pos - serializables->things[thing_idx].y_offset);
+    /*
+    gfx_draw_texture((Texture_t *)(ephemerals->scratch.buff+serializables->white_dot_idx),
+        serializables->things[thing_idx].x_pos,
+        serializables->things[thing_idx].y_pos);
+        */
 }
 
-static void gfx_draw_all(void)
+static void gfx_draw_all_things(void)
 {
-    gfx_sort_things_draw_order();
-
     for (uint16_t i = 0; i < serializables->things_count; i++)
     {
-        gfx_draw_thing(ephemerals->things_draw_order[i]);
+        gfx_draw_thing(ephemerals->things_vertical_order[i]);
     }
 }
 
@@ -327,19 +374,25 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
 
         serializables->things_count = APP_THINGS_COUNT;
 
+        serializables->white_dot_idx = load_texture_to_scratch("white.bmp");
+
         serializables->things[0].texture_idx = load_texture_to_scratch("thing1.bmp");
         serializables->things[0].move_sfx_idx = load_wav_to_scratch("sfx01.wav");
-        serializables->things[0].x_pos = 0;
-        serializables->things[0].y_pos = 1;
-        serializables->things[0].x_offset = 3;
-        serializables->things[0].y_offset = 7;
+        serializables->things[0].x_pos = 24;
+        serializables->things[0].y_pos = 8;
+        serializables->things[0].x_offset = 4;
+        serializables->things[0].y_offset = 6;
+        serializables->things[0].coll_height = 1;
+        serializables->things[0].coll_width = 5;
 
         serializables->things[1].texture_idx = load_texture_to_scratch("thing2.bmp");
         serializables->things[1].move_sfx_idx = load_wav_to_scratch("sfx02.wav");
-        serializables->things[1].x_pos = 5;
-        serializables->things[1].y_pos = 4;
-        serializables->things[1].x_offset = 3;
-        serializables->things[1].y_offset = 7;
+        serializables->things[1].x_pos = 32;
+        serializables->things[1].y_pos = 12;
+        serializables->things[1].x_offset = 4;
+        serializables->things[1].y_offset = 6;
+        serializables->things[1].coll_height = 1;
+        serializables->things[1].coll_width = 5;
 
         size_t apple_texture_idx = load_texture_to_scratch("apple.bmp");
 
@@ -348,8 +401,10 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
             serializables->things[i].texture_idx = apple_texture_idx;
             serializables->things[i].x_pos = 2+(i*4);
             serializables->things[i].y_pos = 4+(i*2);
-            serializables->things[i].x_offset = 1;
-            serializables->things[i].y_offset = 3;
+            serializables->things[i].x_offset = 2;
+            serializables->things[i].y_offset = 2;
+            serializables->things[i].coll_height = 1;
+            serializables->things[i].coll_width = 3;
         }
 
         serializables->controlled_thing_idx = 0;
@@ -362,7 +417,7 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
     /// TODO: do this right
     for (uint16_t i = 0; i < serializables->things_count; i++)
     {
-        ephemerals->things_draw_order[i] = i;
+        ephemerals->things_vertical_order[i] = i;
     }
 }
 
@@ -370,8 +425,9 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
 void app_loop(void)
 {
     input_process_all();
+    things_sort_vertical_order();
     gfx_clear_buffer();
-    gfx_draw_all();
+    gfx_draw_all_things();
 }
 
 /// must match prototype @ref AppExitFunc
