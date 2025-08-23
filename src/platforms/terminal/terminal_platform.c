@@ -19,7 +19,6 @@
 #define LIB_NAME ""
 #endif
 
-int64_t time_get_delta_us(void);
 Memory_t* memory_allocate(size_t size);
 void memory_release(Memory_t **memory_pptr);
 void storage_save_state(char *state_name);
