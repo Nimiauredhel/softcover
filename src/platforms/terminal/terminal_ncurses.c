@@ -7,7 +7,6 @@
 
 static WINDOW *main_window = NULL;
 static WINDOW *debug_window = NULL;
-static WINDOW *audiovis_window = NULL;
 
 #define COLOR_PAIR_BG_BLACK (0)
 #define COLOR_PAIR_BG_RED (1)
@@ -19,13 +18,53 @@ static WINDOW *audiovis_window = NULL;
 #define COLOR_PAIR_BG_WHITE (7)
 
 static bool ncurses_is_initialized = false;
+static GfxDebugMode_t gfx_debug_mode = 0;
 
-static uint8_t audiovis_width;
-static uint8_t audiovis_height;
+static uint8_t main_window_full_width;
+static uint8_t main_window_full_height;
+
+static uint8_t main_window_partial_width;
+static uint8_t main_window_partial_height;
+
+static uint8_t main_window_current_width;
+static uint8_t main_window_current_height;
+
+static uint8_t debug_window_width;
+static uint8_t debug_window_height;
+
 static int audiovis_mid_row;
+
+GfxDebugMode_t gfx_get_debug_mode(void)
+{
+    return gfx_debug_mode;
+}
+
+void gfx_toggle_debug_mode(void)
+{
+    gfx_debug_mode = (gfx_debug_mode + 1) % GFX_DEBUG_MAXVAL;
+
+    switch(gfx_debug_mode)
+    {
+    case GFX_DEBUG_NONE:
+        main_window_current_width =  main_window_full_width;
+        main_window_current_height = main_window_full_height;
+        wresize(main_window, main_window_current_height, main_window_current_width);
+        break;
+    case GFX_DEBUG_LOG:
+        main_window_current_width =  main_window_partial_width;
+        main_window_current_height = main_window_partial_height;
+        wresize(main_window, main_window_current_height, main_window_current_width);
+        debug_refresh_gfx();
+        break;
+    case GFX_DEBUG_AUDIO:
+    case GFX_DEBUG_MAXVAL:
+      break;
+    }
+}
 
 void gfx_refresh_debug_window(DebugRing_t *debug_ring, bool is_break)
 {
+    if (gfx_debug_mode != GFX_DEBUG_LOG) return;
     werase(debug_window);
 
     wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
@@ -34,10 +73,10 @@ void gfx_refresh_debug_window(DebugRing_t *debug_ring, bool is_break)
 
     uint8_t idx = debug_ring->head;
 
-    for (uint8_t i = 0; i < debug_ring->len; i++)
+    for (uint8_t i = 1; i < debug_ring->len; i++)
     {
         wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BG_BLACK));
-        mvwprintw(debug_window, i, 8, "[%u]%u: %s", idx, i, debug_ring->debug_messages[idx]);
+        mvwprintw(debug_window, i, 0, "[%u]%u: %s", idx, i, debug_ring->debug_messages[idx]);
         wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
 
         idx++;
@@ -105,7 +144,7 @@ uint8_t gfx_rgb_to_color_pair(uint8_t r, uint8_t g, uint8_t b)
     return winner;
 }
 
-char input_read(void)
+int input_read(void)
 {
     if (ncurses_is_initialized)
     {
@@ -117,15 +156,20 @@ char input_read(void)
     }
 }
 
-void input_push_to_buffer(PlatformSettings_t *settings, ByteRing_t *input_buffer)
+void input_push_to_buffer(PlatformSettings_t *settings, IntRing_t *input_buffer)
 {
-    char c = '~';
+    int c = '~';
 
     for (uint8_t i = 0; i < 8; i++)
     {
         c = input_read();
         if (c == '~') continue;
-        byte_ring_push(input_buffer, (uint8_t *)&c, 1);
+        if (c == KEY_LEFT)
+        {
+            gfx_toggle_debug_mode();
+            continue;
+        }
+        int_ring_push(input_buffer, &c, 1);
     }
 }
 
@@ -153,7 +197,7 @@ void gfx_sync_buffer(Texture_t *gfx_buffer)
 
 void gfx_audio_vis(const FloatRing_t *audio_buffer, float volume)
 {
-    werase(audiovis_window);
+    werase(debug_window);
 
     float max_val = 0.0f;
     float min_val = 0.0f;
@@ -170,13 +214,13 @@ void gfx_audio_vis(const FloatRing_t *audio_buffer, float volume)
 
     float norm = ((float)audiovis_mid_row * 0.5f) / max_abs_val;
 
-    mvwprintw(audiovis_window, 0, 0, "Min: %f Max: %f", min_val, max_val);
+    mvwprintw(debug_window, 0, 0, "Min: %f Max: %f", min_val, max_val);
 
-    uint16_t frames_per_column = (audio_buffer->capacity / 2) / audiovis_width;
+    uint16_t frames_per_column = (audio_buffer->capacity / 2) / debug_window_width;
     uint16_t count = 0; 
     bool silence = false;
 
-    for (uint16_t i = 0; i < audiovis_width; i++)
+    for (uint16_t i = 0; i < debug_window_width; i++)
     {
         float frame_sums_stereo[2] = { 0.0f, 0.0f };
 
@@ -187,10 +231,10 @@ void gfx_audio_vis(const FloatRing_t *audio_buffer, float volume)
 
             int mid_color = count == 0 ? COLOR_PAIR_BG_CYAN : COLOR_PAIR_BG_BLUE;
 
-            wattron(audiovis_window,  COLOR_PAIR(mid_color));
-            mvwaddch(audiovis_window, audiovis_mid_row,     i, ' ');
-            mvwaddch(audiovis_window, audiovis_mid_row * 3, i, ' ');
-            wattroff(audiovis_window, COLOR_PAIR(mid_color));
+            wattron( debug_window,  COLOR_PAIR(mid_color));
+            mvwaddch(debug_window, audiovis_mid_row,     i, ' ');
+            mvwaddch(debug_window, audiovis_mid_row * 3, i, ' ');
+            wattroff(debug_window, COLOR_PAIR(mid_color));
 
             if (!silence && count >= audio_buffer->length)
             {
@@ -216,33 +260,34 @@ void gfx_audio_vis(const FloatRing_t *audio_buffer, float volume)
             int color_pair = silence ? COLOR_PAIR_BG_BLUE
                 : value > 0.0f ? COLOR_PAIR_BG_GREEN : COLOR_PAIR_BG_RED;
 
-            wattron(audiovis_window, COLOR_PAIR(color_pair));
+            wattron(debug_window, COLOR_PAIR(color_pair));
 
             for (int k = 1; k <= max_height_abs; k++)
             {
-                mvwaddch(audiovis_window, (audiovis_mid_row * (1 + (2*j)))+(k*dir*-1), i, ' ');
+                mvwaddch(debug_window, (audiovis_mid_row * (1 + (2*j)))+(k*dir*-1), i, ' ');
             }
 
-            wattroff(audiovis_window, COLOR_PAIR(color_pair));
+            wattroff(debug_window, COLOR_PAIR(color_pair));
         }
     }
 
-    for (uint16_t i = 0; i < (uint16_t)(audiovis_height * (volume * 0.5f)); i++)
+    for (uint16_t i = 0; i < (uint16_t)(debug_window_height * (volume * 0.5f)); i++)
     {
-        wattron(audiovis_window, COLOR_PAIR(COLOR_PAIR_BG_MAGENTA));
-        mvwaddch(audiovis_window, audiovis_height - i, 0, ' ');
-        wattroff(audiovis_window, COLOR_PAIR(COLOR_PAIR_BG_MAGENTA));
+        wattron( debug_window, COLOR_PAIR(COLOR_PAIR_BG_MAGENTA));
+        mvwaddch(debug_window, debug_window_height - i, 0, ' ');
+        wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_MAGENTA));
     }
 
-    wrefresh(audiovis_window);
+    wrefresh(debug_window);
 }
 
-void input_init(PlatformSettings_t *settings, ByteRing_t **input_buffer_pptr)
+void input_init(PlatformSettings_t *settings, IntRing_t **input_buffer_pptr)
 {
+    keypad(main_window, true);
     /// init input buffer
-    *input_buffer_pptr = (ByteRing_t *)malloc(sizeof(ByteRing_t) +
+    *input_buffer_pptr = (IntRing_t *)malloc(sizeof(IntRing_t) +
     settings->input_buffer_capacity);
-    ByteRing_t *input_buffer = (ByteRing_t *)*input_buffer_pptr;
+    IntRing_t *input_buffer = (IntRing_t *)*input_buffer_pptr;
     memset(input_buffer, 0, sizeof(*input_buffer));
     input_buffer->capacity = settings->input_buffer_capacity;
 }
@@ -269,13 +314,23 @@ void gfx_init(PlatformSettings_t *settings, Texture_t **gfx_buffer_pptr)
     noecho();
     cbreak();
 
-    audiovis_width = settings->gfx_buffer_width * 0.4f;
-    audiovis_height = settings->gfx_buffer_height;
-    audiovis_mid_row = audiovis_height / 4;
+    gfx_debug_mode = GFX_DEBUG_NONE;
 
-    main_window     = newwin((settings->gfx_buffer_height / 8) * 7, settings->gfx_buffer_width * 0.6f, 0, 0);
-    debug_window    = newwin((settings->gfx_buffer_height / 8) * 1, settings->gfx_buffer_width * 0.6f, ((settings->gfx_buffer_height / 8) * 7), 0);
-    audiovis_window = newwin(audiovis_height,                    audiovis_width                   , 0, settings->gfx_buffer_width * 0.6f);
+    main_window_full_width =     settings->gfx_buffer_width;
+    main_window_full_height =    settings->gfx_buffer_height;
+
+    main_window_current_width =  main_window_full_width;
+    main_window_current_height = main_window_full_height;
+
+    main_window_partial_width =   main_window_full_width * 0.5f;
+    main_window_partial_height = main_window_full_height;
+
+    debug_window_width =  main_window_full_width * 0.5f;
+    debug_window_height = main_window_full_height;
+    audiovis_mid_row =    debug_window_height / 4;
+
+    main_window  = newwin(main_window_full_height,  main_window_full_width,  0, 0);
+    debug_window = newwin(debug_window_height, debug_window_width, 0, main_window_partial_width);
 
     nodelay(main_window, true);
     nodelay(debug_window, true);
@@ -295,7 +350,6 @@ void gfx_init(PlatformSettings_t *settings, Texture_t **gfx_buffer_pptr)
 
     wrefresh(main_window);
     wrefresh(debug_window);
-    wrefresh(audiovis_window);
 
     ncurses_is_initialized = true;
     debug_log("Gfx initialized.");

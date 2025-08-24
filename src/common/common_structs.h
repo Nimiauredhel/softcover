@@ -9,6 +9,7 @@ typedef struct Memory Memory_t;
 typedef struct Texture Texture_t;
 typedef struct AudioClip AudioClip_t;
 typedef struct ByteRing ByteRing_t;
+typedef struct IntRing IntRing_t;
 typedef struct FloatRing FloatRing_t;
 
 struct Memory
@@ -31,6 +32,14 @@ struct AudioClip
     float samples[];
 };
 
+struct IntRing
+{
+    uint16_t capacity;
+    uint16_t length;
+    uint16_t head;
+    int32_t buffer[];
+};
+
 struct ByteRing
 {
     uint16_t capacity;
@@ -47,6 +56,8 @@ struct FloatRing
     float buffer[];
 };
 
+void int_ring_push(IntRing_t *ring, int *chunk, uint16_t len);
+bool int_ring_pop(IntRing_t *ring, int *out);
 void byte_ring_push(ByteRing_t *ring, uint8_t *chunk, uint16_t len);
 bool byte_ring_pop(ByteRing_t *ring, uint8_t *out);
 void float_ring_push(FloatRing_t *ring, float *chunk, uint16_t len);

@@ -242,10 +242,10 @@ int main(int argc, char **argv)
 
     static struct stat file_stat = {0};
 
+    initialize_signal_handler();
+
     debug_init();
     debug_log("Program started.\n");
-
-    initialize_signal_handler();
 
     if (argc > 1)
     {
@@ -290,6 +290,8 @@ int main(int argc, char **argv)
     {
         time_mark_cycle_start();
 
+        input_push_to_buffer(&platform_settings, app_memory.input_buffer);
+
         if (app_loop != NULL)
         {
             app_loop();
@@ -298,8 +300,12 @@ int main(int argc, char **argv)
         {
         }
 
+        if (gfx_get_debug_mode() == GFX_DEBUG_AUDIO)
+        {
+            gfx_audio_vis(app_memory.audio_buffer, audio_get_volume());
+        }
+
         gfx_sync_buffer(app_memory.gfx_buffer);
-        gfx_audio_vis(app_memory.audio_buffer, audio_get_volume());
 
         stat(lib_path, &file_stat);
         lib_modified_time = file_stat.st_mtime;
@@ -309,8 +315,6 @@ int main(int argc, char **argv)
             debug_log("App modification detected.\n");
             load_app();
         }
-
-        input_push_to_buffer(&platform_settings, app_memory.input_buffer);
 
         time_mark_cycle_end(platform_settings.gfx_frame_time_target_us);
         int64_t last_cycle_leftover_us = time_get_leftover_us();
@@ -325,6 +329,14 @@ int main(int argc, char **argv)
 platform_termination:
 
     if (app_exit != NULL) app_exit();
+
+    if (lib_handle != NULL)
+    {
+        debug_log("Closing previously loaded handle.\n");
+        dlclose(lib_handle);
+        lib_handle = NULL;
+        func_handle = NULL;
+    }
 
     audio_deinit();
     gfx_deinit();

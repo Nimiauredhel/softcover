@@ -55,7 +55,7 @@ static AppMemoryPartition_t *app = NULL;
 static AppSerializable_t *serializables = NULL;
 static AppEphemeral_t *ephemerals = NULL;
 
-static char input_read_from_buffer(ByteRing_t *input_buffer);
+static char input_read_from_buffer(IntRing_t *input_buffer);
 static void input_process_all(void);
 static size_t load_texture_to_scratch(char *name);
 static size_t load_wav_to_scratch(char *name);
@@ -72,13 +72,13 @@ static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y);
 static void gfx_draw_thing(uint16_t thing_idx);
 static void gfx_draw_all_things(void);
 
-static char input_read_from_buffer(ByteRing_t *input_buffer)
+static char input_read_from_buffer(IntRing_t *input_buffer)
 {
     if (app == NULL || serializables == NULL) return '~';
 
-    char c = '~';
+    int c = '~';
 
-    if (byte_ring_pop(input_buffer, (uint8_t *)&c)) return c;
+    if (int_ring_pop(input_buffer, &c)) return c;
     return '~';
 }
 
@@ -86,7 +86,7 @@ static void input_process_all(void)
 {
     if (platform == NULL || serializables == NULL) return;
 
-    char input = '~';
+    int input = '~';
 
     do
     {
@@ -133,11 +133,14 @@ static void input_process_all(void)
 
 static size_t load_texture_to_scratch(char *name)
 {
-    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Loading texture '%s' to scratch memory.", name);
-    platform->debug_log(ephemerals->debug_buff);
-
     size_t index = ephemerals->scratch.used;
     Texture_t *texture_ptr = (Texture_t *)(ephemerals->scratch.buff+index);
+
+    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff),
+            "Loading texture '%s' to scratch memory at offset %ld, address %p.",
+            name, index, (void *)texture_ptr);
+    platform->debug_log(ephemerals->debug_buff);
+
     platform->gfx_load_texture(name, texture_ptr);
     size_t size = sizeof(Texture_t) + (texture_ptr->height * texture_ptr->width * texture_ptr->pixel_size_bytes);
     ephemerals->scratch.used += size;
@@ -368,8 +371,8 @@ void app_setup(Platform_t *interface)
     platform->settings->gfx_frame_time_target_us = 16666;
 
     platform->settings->gfx_pixel_size_bytes = 1;
-    platform->settings->gfx_buffer_width = 160;
-    platform->settings->gfx_buffer_height = 32;
+    platform->settings->gfx_buffer_width = 156;
+    platform->settings->gfx_buffer_height = 36;
 
     size_t required_gfx_memory = 
     platform->settings->gfx_pixel_size_bytes *

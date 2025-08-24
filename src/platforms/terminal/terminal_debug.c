@@ -4,6 +4,11 @@
 static bool debug_is_break = false;
 static DebugRing_t debug_ring = {0};
 
+void debug_refresh_gfx(void)
+{
+    gfx_refresh_debug_window(&debug_ring, debug_is_break);
+}
+
 void debug_log(char *message)
 {
     uint8_t idx = debug_ring.head + debug_ring.len % DEBUG_RING_CAPACITY;
@@ -21,7 +26,7 @@ void debug_log(char *message)
 
     if (gfx_is_initialized())
     {
-        gfx_refresh_debug_window(&debug_ring, debug_is_break);
+        debug_refresh_gfx();
     }
     else
     {
@@ -34,7 +39,7 @@ void debug_break(void)
     if (gfx_is_initialized())
     {
         debug_is_break = true;
-        gfx_refresh_debug_window(&debug_ring, debug_is_break);
+        debug_refresh_gfx();
     }
 
     char c = '~';

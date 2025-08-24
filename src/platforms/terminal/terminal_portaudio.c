@@ -5,7 +5,7 @@
 
 #include "portaudio.h"
 
-static PaStream *audio_stream;
+static PaStream *audio_stream = NULL;
 static float audio_volume = 1.0f;
 
 static int paStreamCallback(const void *inputBuffer, void *outputBuffer, unsigned long framesPerBuffer,
@@ -111,7 +111,9 @@ void audio_deinit(void)
 
     if (audio_stream != NULL)
     {
+        set_audio(audio_stream, false);
         err = Pa_CloseStream(audio_stream);
+        audio_stream = NULL;
     }
 
     err = Pa_Terminate();
