@@ -8,11 +8,13 @@
 
 #define APP_TEST_AUDIO_SAMPLE_LEN (8192)
 #define APP_SCRATCH_SIZE (1024*2048)
-#define APP_THINGS_COUNT (8)
+#define APP_THINGS_COUNT (256)
+#define APP_THINGS_LAYER_COUNT (6)
 #define APP_CLIPS_COUNT (2)
 
 typedef struct Thing
 {
+    bool used;
     size_t texture_idx;
     size_t move_sfx_idx;
     int16_t x_pos;
@@ -21,6 +23,7 @@ typedef struct Thing
     int16_t y_offset;
     uint16_t coll_width;
     uint16_t coll_height;
+    uint8_t layer;
 } Thing_t;
 
 typedef struct AppScratch
@@ -35,7 +38,6 @@ typedef struct AppSerializables
     uint16_t mov_speed;
     uint16_t things_count;
     uint16_t controlled_thing_idx;
-    uint16_t white_dot_idx;
     Thing_t things[APP_THINGS_COUNT];
     size_t audio_clip_indices[APP_CLIPS_COUNT];
 } AppSerializable_t;
@@ -43,7 +45,8 @@ typedef struct AppSerializables
 typedef struct AppEphemera
 {
     char debug_buff[128];
-    uint16_t things_vertical_order[APP_THINGS_COUNT];
+    int32_t things_draw_order_layer_offsets[APP_THINGS_LAYER_COUNT];
+    uint16_t things_draw_order[APP_THINGS_COUNT];
     AppScratch_t scratch;
 } AppEphemeral_t;
 
@@ -58,10 +61,12 @@ static size_t load_texture_to_scratch(char *name);
 static size_t load_wav_to_scratch(char *name);
 static void audio_push_samples(float *samples, uint32_t len);
 static void audio_push_clip(AudioClip_t *clip);
+static void things_initialize_draw_order(void);
+static void things_update_draw_order(void);
 static void things_get_distance(uint16_t first_thing_id, uint16_t second_thing_id, int32_t *x_dist_out, int32_t *y_dist_out);
 static uint16_t thing_test_collision(uint16_t thing_id);
 static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta);
-static void things_sort_vertical_order(void);
+static void things_sort_by_comparer(uint16_t start_idx, uint16_t end_idx, int8_t (*comparer)(Thing_t*, Thing_t*));
 static void gfx_clear_buffer(void);
 static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y);
 static void gfx_draw_thing(uint16_t thing_idx);
@@ -163,27 +168,85 @@ static void audio_push_clip(AudioClip_t *clip)
     audio_push_samples(clip->samples, clip->num_samples);
 }
 
-static void things_sort_vertical_order(void)
+static int8_t things_compare_y(Thing_t *first, Thing_t *second)
+{
+    return (first->y_pos + first->y_offset) - (second->y_pos + second->y_offset);
+}
+
+static int8_t things_compare_layer(Thing_t *first, Thing_t *second)
+{
+    return first->layer - second->layer;
+}
+
+static void things_sort_by_comparer(uint16_t start_idx, uint16_t end_idx, int8_t (*comparer)(Thing_t*, Thing_t*))
 {
     uint16_t temp;
     bool swapped = false;
 
-    for (uint16_t end_idx = serializables->things_count-1; end_idx > 0; end_idx--)
+    for (; end_idx >= start_idx; end_idx--)
     {
+        if (!serializables->things[ephemerals->things_draw_order[end_idx]].used)
+        {
+            continue;
+        }
+
         swapped = false;
 
-        for (uint16_t i = 0; i < end_idx; i++)
+        for (uint16_t i = start_idx; i < end_idx; i++)
         {
-            if (serializables->things[ephemerals->things_vertical_order[i]].y_pos > serializables->things[ephemerals->things_vertical_order[i+1]].y_pos)
+            if (comparer(
+                        serializables->things+ephemerals->things_draw_order[i],
+                        serializables->things+ephemerals->things_draw_order[i+1])
+                        > 0)
             {
                 swapped = true;
-                temp = ephemerals->things_vertical_order[i];
-                ephemerals->things_vertical_order[i] = ephemerals->things_vertical_order[i+1];
-                ephemerals->things_vertical_order[i+1] = temp;
+                temp = ephemerals->things_draw_order[i];
+                ephemerals->things_draw_order[i] = ephemerals->things_draw_order[i+1];
+                ephemerals->things_draw_order[i+1] = temp;
             }
         }
 
         if (!swapped) break;
+    }
+}
+
+static void things_initialize_draw_order(void)
+{
+    /// initialize unsorted state
+    for (uint16_t i = 0; i < serializables->things_count; i++)
+    {
+        ephemerals->things_draw_order[i] = i;
+    }
+
+    things_sort_by_comparer(0, serializables->things_count-1, things_compare_layer);
+
+    uint8_t layer = 0;
+    Thing_t *thing;
+
+    // default layer 0 offset before the actual work
+    thing = serializables->things+ephemerals->things_draw_order[0];
+    ephemerals->things_draw_order_layer_offsets[0] = thing->layer;
+
+    for (uint16_t i = 1; i < serializables->things_count; i++)
+    {
+        thing = serializables->things+ephemerals->things_draw_order[i];
+
+        if (thing->layer > layer)
+        {
+            layer = thing->layer;
+            ephemerals->things_draw_order_layer_offsets[layer] = i;
+        }
+    }
+}
+
+static void things_update_draw_order(void)
+{
+    for (int8_t i = 0; i < APP_THINGS_LAYER_COUNT; i++)
+    {
+        things_sort_by_comparer(ephemerals->things_draw_order_layer_offsets[i],
+                i == APP_THINGS_LAYER_COUNT - 1 ? serializables->things_count - 1
+                : ephemerals->things_draw_order_layer_offsets[i+1],
+                things_compare_y);
     }
 }
 
@@ -230,9 +293,11 @@ static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta)
     }
 
     audio_push_clip((AudioClip_t *)(ephemerals->scratch.buff+serializables->things[thing_idx].move_sfx_idx));
+    /*
     snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Thing %d moved to [%d,%d]", thing_idx,
             serializables->things[thing_idx].x_pos, serializables->things[thing_idx].y_pos);
     platform->debug_log(ephemerals->debug_buff);
+    */
 }
 
 static void gfx_clear_buffer(void)
@@ -283,18 +348,13 @@ static void gfx_draw_thing(uint16_t thing_idx)
     gfx_draw_texture((Texture_t *)(ephemerals->scratch.buff+serializables->things[thing_idx].texture_idx),
         serializables->things[thing_idx].x_pos - serializables->things[thing_idx].x_offset,
         serializables->things[thing_idx].y_pos - serializables->things[thing_idx].y_offset);
-    /*
-    gfx_draw_texture((Texture_t *)(ephemerals->scratch.buff+serializables->white_dot_idx),
-        serializables->things[thing_idx].x_pos,
-        serializables->things[thing_idx].y_pos);
-        */
 }
 
 static void gfx_draw_all_things(void)
 {
     for (uint16_t i = 0; i < serializables->things_count; i++)
     {
-        gfx_draw_thing(ephemerals->things_vertical_order[i]);
+        gfx_draw_thing(ephemerals->things_draw_order[i]);
     }
 }
 
@@ -382,8 +442,6 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
 
         serializables->things_count = APP_THINGS_COUNT;
 
-        serializables->white_dot_idx = load_texture_to_scratch("white.bmp");
-
         serializables->things[0].texture_idx = load_texture_to_scratch("thing1.bmp");
         serializables->things[0].move_sfx_idx = load_wav_to_scratch("sfx01.wav");
         serializables->things[0].x_pos = 24;
@@ -392,6 +450,8 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
         serializables->things[0].y_offset = 6;
         serializables->things[0].coll_height = 1;
         serializables->things[0].coll_width = 5;
+        serializables->things[0].layer = 5;
+        serializables->things[0].used = true;
 
         serializables->things[1].texture_idx = load_texture_to_scratch("thing2.bmp");
         serializables->things[1].move_sfx_idx = load_wav_to_scratch("sfx02.wav");
@@ -401,18 +461,63 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
         serializables->things[1].y_offset = 6;
         serializables->things[1].coll_height = 1;
         serializables->things[1].coll_width = 5;
+        serializables->things[1].layer = 5;
+        serializables->things[1].used = true;
 
-        size_t apple_texture_idx = load_texture_to_scratch("apple.bmp");
+        size_t pillar_texture_idx = load_texture_to_scratch("pillar_iso_hstretch.bmp");
+        size_t back_wall_texture_idx = load_texture_to_scratch("wall_back_hstretch.bmp");
+        size_t floor_texture_idx = load_texture_to_scratch("floor_hstretch.bmp");
 
-        for (uint16_t i = 2; i < serializables->things_count; i++)
+        size_t current_idx = 2;
+        size_t start_idx = current_idx;
+        size_t target_idx = current_idx+24;
+
+        for (; current_idx < target_idx; current_idx++)
         {
-            serializables->things[i].texture_idx = apple_texture_idx;
-            serializables->things[i].x_pos = 2+(i*4);
-            serializables->things[i].y_pos = 4+(i*2);
-            serializables->things[i].x_offset = 2;
-            serializables->things[i].y_offset = 2;
-            serializables->things[i].coll_height = 1;
-            serializables->things[i].coll_width = 3;
+            serializables->things[current_idx].texture_idx = back_wall_texture_idx;
+            serializables->things[current_idx].x_pos = 0 + ((current_idx-start_idx)*4);
+            serializables->things[current_idx].y_pos = 0;
+            serializables->things[current_idx].x_offset = 0;
+            serializables->things[current_idx].y_offset = 0;
+            serializables->things[current_idx].coll_height = 0;
+            serializables->things[current_idx].coll_width = 0;
+            serializables->things[current_idx].layer = 0;
+            serializables->things[current_idx].used = true;
+        }
+
+        for (int y = 0; y < 6; y++)
+        {
+            start_idx = current_idx;
+            target_idx = current_idx+24;
+
+            for (; current_idx < target_idx; current_idx++)
+            {
+                serializables->things[current_idx].texture_idx = floor_texture_idx;
+                serializables->things[current_idx].x_pos = 0 + ((current_idx-start_idx)*4);
+                serializables->things[current_idx].y_pos = 5 + (4*y);
+                serializables->things[current_idx].x_offset = 0;
+                serializables->things[current_idx].y_offset = 0;
+                serializables->things[current_idx].coll_height = 0;
+                serializables->things[current_idx].coll_width = 0;
+                serializables->things[current_idx].layer = 0;
+                serializables->things[current_idx].used = true;
+            }
+        }
+
+        start_idx = current_idx;
+        target_idx = current_idx+7;
+
+        for (; current_idx < target_idx; current_idx++)
+        {
+            serializables->things[current_idx].texture_idx = pillar_texture_idx;
+            serializables->things[current_idx].x_pos = 5 + ((current_idx-start_idx)*16);
+            serializables->things[current_idx].y_pos = 5;
+            serializables->things[current_idx].x_offset = 3;
+            serializables->things[current_idx].y_offset = 3;
+            serializables->things[current_idx].coll_height = 2;
+            serializables->things[current_idx].coll_width = 12;
+            serializables->things[current_idx].layer = 5;
+            serializables->things[current_idx].used = true;
         }
 
         serializables->controlled_thing_idx = 0;
@@ -421,19 +526,16 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
         serializables->initialized = true;
     }
 
-    /// section of ephemerals that depends on serializables, proabably a bad idea for ~200 other reasons as well
-    /// TODO: do this right
-    for (uint16_t i = 0; i < serializables->things_count; i++)
-    {
-        ephemerals->things_vertical_order[i] = i;
-    }
+    /// section combining serializables and ephemerals
+    things_initialize_draw_order();
+    things_update_draw_order();
 }
 
 /// must match prototype @ref AppLoopFunc
 void app_loop(void)
 {
     input_process_all();
-    things_sort_vertical_order();
+    things_update_draw_order();
     gfx_clear_buffer();
     gfx_draw_all_things();
 }

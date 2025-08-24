@@ -146,7 +146,7 @@ void gfx_sync_buffer(Texture_t *gfx_buffer)
     }
 
     float fps = 1000000.0f / time_get_delta_us();
-    mvwprintw(main_window, 0, 0, "%.2f fps\n", fps);
+    mvwprintw(main_window, 0, 84, "%.2f fps\n", fps);
 
     wrefresh(main_window);
 }
@@ -273,8 +273,8 @@ void gfx_init(PlatformSettings_t *settings, Texture_t **gfx_buffer_pptr)
     audiovis_height = settings->gfx_buffer_height;
     audiovis_mid_row = audiovis_height / 4;
 
-    main_window     = newwin((settings->gfx_buffer_height / 16) * 11, settings->gfx_buffer_width * 0.6f, 0, 0);
-    debug_window    = newwin((settings->gfx_buffer_height / 16) * 5, settings->gfx_buffer_width * 0.6f, ((settings->gfx_buffer_height / 16) * 11), 0);
+    main_window     = newwin((settings->gfx_buffer_height / 8) * 7, settings->gfx_buffer_width * 0.6f, 0, 0);
+    debug_window    = newwin((settings->gfx_buffer_height / 8) * 1, settings->gfx_buffer_width * 0.6f, ((settings->gfx_buffer_height / 8) * 7), 0);
     audiovis_window = newwin(audiovis_height,                    audiovis_width                   , 0, settings->gfx_buffer_width * 0.6f);
 
     nodelay(main_window, true);
