@@ -28,9 +28,9 @@ void set_should_terminate(bool value);
 
 static const char *state_filename_format = "%s.state";
 
-static char lib_path[256] = LIB_NAME;
+static char lib_path[128] = LIB_NAME;
 
-static char platform_top_debug_buff[256];
+static char platform_top_debug_buff[DEBUG_MESSAGE_MAX_LEN];
 
 static time_t lib_load_time = {0};
 static time_t lib_modified_time = {0};
@@ -136,7 +136,7 @@ void memory_release(Memory_t **memory_pptr)
 
 void storage_save_state(char *state_name)
 {
-    char file_name[256] = {0};
+    char file_name[128] = {0};
     FILE *file = NULL;
 
     snprintf(file_name, sizeof(file_name), state_filename_format, state_name);
@@ -160,7 +160,7 @@ void storage_save_state(char *state_name)
 
 void storage_load_state(char *state_name)
 {
-    char file_name[256] = {0};
+    char file_name[128] = {0};
     size_t file_size = 0;
     FILE *file = NULL;
 

@@ -80,7 +80,7 @@ int random_range(int min, int max)
 
 void gfx_load_texture(char *name, Texture_t *dest)
 {
-    static char debug_buff[128] = {0};
+    static char debug_buff[DEBUG_MESSAGE_MAX_LEN] = {0};
 
     uint8_t *temp_buff = NULL;
 
@@ -125,7 +125,7 @@ void audio_load_wav(char *name, AudioClip_t *dest)
 {
 #define BLOCK_SIZE (256)
 
-    static char debug_buff[128] = {0};
+    static char debug_buff[DEBUG_MESSAGE_MAX_LEN] = {0};
 
     TinyWav tw;
     tinywav_open_read(&tw, name,

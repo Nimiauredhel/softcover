@@ -1,18 +1,24 @@
 #include "terminal_portaudio.h"
 
-#include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "portaudio.h"
+#include "terminal_debug.h"
 
+static bool audio_is_initialized = false;
 static PaStream *audio_stream = NULL;
 static float audio_volume = 1.0f;
 
 static int paStreamCallback(const void *inputBuffer, void *outputBuffer, unsigned long framesPerBuffer,
                            const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void *userData)
 {
+    if (!audio_is_initialized) return 0;
+
     /* Prevent unused variable warning. */
     (void) inputBuffer;
+    (void) timeInfo;
+    (void) statusFlags;
 
     /* Cast data passed through stream to our structure. */
     UniformRing_t *data = (UniformRing_t*)userData; 
@@ -36,18 +42,31 @@ static int paStreamCallback(const void *inputBuffer, void *outputBuffer, unsigne
 
 static void set_audio(PaStream *stream, bool active)
 {
+    static char debug_buff[DEBUG_MESSAGE_MAX_LEN] = {0};
+
+    if (!audio_is_initialized) return;
+
     PaError err = paNoError;
     bool was_active = Pa_IsStreamActive(stream);
 
     if (active != was_active)
     {
-        if (active) err = Pa_StartStream(stream);
-        else err = Pa_StopStream(stream);
+        if (active)
+        {
+            debug_log("Starting audio stream");
+            err = Pa_StartStream(stream);
+        }
+        else
+        {
+            debug_log("Stopping audio stream");
+            err = Pa_StopStream(stream); 
+        }
     }
 
     if(err != paNoError)
     {
-        // TODO: handle error
+        snprintf(debug_buff, sizeof(debug_buff), "PortAudio error: %s\n", Pa_GetErrorText(err));
+        debug_log(debug_buff);
     }
 }
 
@@ -58,24 +77,32 @@ float audio_get_volume(void)
 
 void audio_set_volume(float value)
 {
-    if (value > 2.0f || value < 0.0f) return;
+    if (value > 2.0f) value = 2.0f;
+    else if (value < 0.0f) value = 0.0f;
     audio_volume = value;
 }
 
 void audio_init(PlatformSettings_t *settings, UniformRing_t **audio_buffer_pptr)
 {
+    static char debug_buff[DEBUG_MESSAGE_MAX_LEN] = {0};
+
+    if (audio_is_initialized) return;
+
+    debug_log("Initializing PortAudio.");
+
     /// init audio buffer
     *audio_buffer_pptr = ring_create(settings->audio_buffer_capacity, sizeof(float));
     UniformRing_t *audio_buffer = (UniformRing_t *)*audio_buffer_pptr;
 
     /// init portaudio
-    PaError err;
+    PaError err = paNoError;
 
     err = Pa_Initialize();
 
     if(err != paNoError)
     {
-        // TODO: handle error
+        snprintf(debug_buff, sizeof(debug_buff), "PortAudio error: %s\n", Pa_GetErrorText(err));
+        debug_log(debug_buff);
     }
 
     PaStreamParameters output_parameters = {0};
@@ -95,24 +122,44 @@ void audio_init(PlatformSettings_t *settings, UniformRing_t **audio_buffer_pptr)
                                audio_buffer);
     if(err != paNoError)
     {
-        // TODO: handle error
+        snprintf(debug_buff, sizeof(debug_buff), "PortAudio error: %s\n", Pa_GetErrorText(err));
+        debug_log(debug_buff);
     }
 
+    audio_is_initialized = true;
     set_audio(audio_stream, true);
 }
 
 void audio_deinit(void)
 {
-    PaError err;
+    static char debug_buff[DEBUG_MESSAGE_MAX_LEN] = {0};
+
+    if (!audio_is_initialized) return;
+
+    debug_log("Deinitializing PortAudio.");
+
+    PaError err = paNoError;
 
     if (audio_stream != NULL)
     {
         set_audio(audio_stream, false);
         err = Pa_CloseStream(audio_stream);
         audio_stream = NULL;
+
+        if(err != paNoError)
+        {
+            snprintf(debug_buff, sizeof(debug_buff), "PortAudio error: %s\n", Pa_GetErrorText(err));
+            debug_log(debug_buff);
+        }
     }
 
     err = Pa_Terminate();
 
-    // TODO: handle PA errors ..
+    if(err != paNoError)
+    {
+        snprintf(debug_buff, sizeof(debug_buff), "PortAudio error: %s\n", Pa_GetErrorText(err));
+        debug_log(debug_buff);
+    }
+
+    audio_is_initialized = false;
 }
