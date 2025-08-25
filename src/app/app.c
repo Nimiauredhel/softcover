@@ -226,6 +226,12 @@ static void things_initialize_draw_order(void)
     uint8_t layer = 0;
     Thing_t *thing;
 
+    /// initialize layer offsets to -1, e.g. no things using that layer
+    for (uint8_t i = 0; i < APP_THINGS_LAYER_COUNT; i++)
+    {
+        ephemerals->things_draw_order_layer_offsets[i] = -1;
+    }
+
     // default layer 0 offset before the actual work
     thing = serializables->things+ephemerals->things_draw_order[0];
     ephemerals->things_draw_order_layer_offsets[0] = thing->layer;
@@ -244,12 +250,26 @@ static void things_initialize_draw_order(void)
 
 static void things_update_draw_order(void)
 {
+    int32_t start_idx = 0;
+    int32_t end_idx = 0;
+
     for (int8_t i = 0; i < APP_THINGS_LAYER_COUNT; i++)
     {
-        things_sort_by_comparer(ephemerals->things_draw_order_layer_offsets[i],
-                i == APP_THINGS_LAYER_COUNT - 1 ? serializables->things_count - 1
-                : ephemerals->things_draw_order_layer_offsets[i+1],
-                things_compare_y);
+        start_idx = ephemerals->things_draw_order_layer_offsets[i];
+
+        if (start_idx < 0) continue;
+
+        end_idx = -1;
+
+        for (int8_t j = i+1; j < APP_THINGS_LAYER_COUNT-1; j++)
+        {
+            end_idx = ephemerals->things_draw_order_layer_offsets[j];
+            if (end_idx < 0) continue;
+        }
+
+        if (end_idx < 0) end_idx = serializables->things_count - 1;
+
+        things_sort_by_comparer(start_idx, end_idx, things_compare_y);
     }
 }
 
@@ -287,6 +307,8 @@ static uint16_t thing_test_collision(uint16_t thing_id)
 
 static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta)
 {
+    if (!serializables->things[thing_idx].used) return;
+
     serializables->things[thing_idx].x_pos += x_delta;
     serializables->things[thing_idx].y_pos += y_delta;
 
@@ -350,6 +372,7 @@ static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y)
 
 static void gfx_draw_thing(uint16_t thing_idx)
 {
+    if (!serializables->things[thing_idx].used) return;
     gfx_draw_texture((Texture_t *)(ephemerals->scratch.buff+serializables->things[thing_idx].texture_idx),
         serializables->things[thing_idx].x_pos - serializables->things[thing_idx].x_offset,
         serializables->things[thing_idx].y_pos - serializables->things[thing_idx].y_offset);
@@ -446,9 +469,18 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
         platform->debug_log("Initializing app serializable state.");
 
         serializables->things_count = APP_THINGS_COUNT;
+        explicit_bzero(serializables->things, sizeof(Thing_t) * serializables->things_count);
 
-        serializables->things[0].texture_idx = load_texture_to_scratch("thing1.bmp");
-        serializables->things[0].move_sfx_idx = load_wav_to_scratch("sfx01.wav");
+        size_t thing1_texture_idx = load_texture_to_scratch("thing1.bmp");
+        size_t thing2_texture_idx = load_texture_to_scratch("thing2.bmp");
+        size_t pillar_texture_idx = load_texture_to_scratch("pillar_iso_hstretch.bmp");
+        size_t back_wall_texture_idx = load_texture_to_scratch("wall_back_hstretch.bmp");
+        size_t floor_texture_idx = load_texture_to_scratch("floor_hstretch.bmp");
+        size_t sfx01_idx = load_wav_to_scratch("sfx01.wav");
+        size_t sfx02_idx = load_wav_to_scratch("sfx02.wav");
+
+        serializables->things[0].texture_idx = thing1_texture_idx;
+        serializables->things[0].move_sfx_idx = sfx01_idx;
         serializables->things[0].x_pos = 24;
         serializables->things[0].y_pos = 8;
         serializables->things[0].x_offset = 4;
@@ -458,8 +490,8 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
         serializables->things[0].layer = 5;
         serializables->things[0].used = true;
 
-        serializables->things[1].texture_idx = load_texture_to_scratch("thing2.bmp");
-        serializables->things[1].move_sfx_idx = load_wav_to_scratch("sfx02.wav");
+        serializables->things[1].texture_idx = thing2_texture_idx;
+        serializables->things[1].move_sfx_idx = sfx02_idx;
         serializables->things[1].x_pos = 32;
         serializables->things[1].y_pos = 12;
         serializables->things[1].x_offset = 4;
@@ -468,10 +500,6 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
         serializables->things[1].coll_width = 5;
         serializables->things[1].layer = 5;
         serializables->things[1].used = true;
-
-        size_t pillar_texture_idx = load_texture_to_scratch("pillar_iso_hstretch.bmp");
-        size_t back_wall_texture_idx = load_texture_to_scratch("wall_back_hstretch.bmp");
-        size_t floor_texture_idx = load_texture_to_scratch("floor_hstretch.bmp");
 
         size_t current_idx = 2;
         size_t start_idx = current_idx;

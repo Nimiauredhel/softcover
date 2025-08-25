@@ -71,7 +71,7 @@ void gfx_refresh_debug_window(DebugRing_t *debug_ring, bool is_break)
     mvwprintw(debug_window, 0, 0, "%s", is_break ? "BREAK - c to continue" : "DEBUG");
     wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
 
-    int32_t mod = debug_ring->len - (debug_window_height + 1);
+    int32_t mod = debug_ring->len - debug_window_height;
     if (mod < 0) mod = 0;
     uint16_t idx = (debug_ring->head + mod) % DEBUG_RING_CAPACITY;;
 
