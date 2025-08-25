@@ -15,22 +15,20 @@ static int paStreamCallback(const void *inputBuffer, void *outputBuffer, unsigne
     (void) inputBuffer;
 
     /* Cast data passed through stream to our structure. */
-    FloatRing_t *data = (FloatRing_t*)userData; 
-
+    UniformRing_t *data = (UniformRing_t*)userData; 
     float *out = (float*)outputBuffer;
     
     for(uint32_t i = 0; i < framesPerBuffer; i++)
     {
-        if (data->length <= 0)
+        if (ring_pop(data, out+i))
+        {
+            out[i] *= audio_volume;
+        }
+        else
         {
             out[i] = 0.0f;
             continue;
         }
-
-        out[i] = data->buffer[data->head] * audio_volume;
-        data->head = data->head + 1;
-        if (data->head >= data->capacity) data->head -= data->capacity;
-        data->length--;
     }
 
     return 0;
@@ -64,13 +62,11 @@ void audio_set_volume(float value)
     audio_volume = value;
 }
 
-void audio_init(PlatformSettings_t *settings, FloatRing_t **audio_buffer_pptr)
+void audio_init(PlatformSettings_t *settings, UniformRing_t **audio_buffer_pptr)
 {
     /// init audio buffer
-    *audio_buffer_pptr = (FloatRing_t *)malloc(sizeof(FloatRing_t) + (sizeof(float) * settings->audio_buffer_capacity));
-    FloatRing_t *audio_buffer = (FloatRing_t *)*audio_buffer_pptr;
-    memset(audio_buffer, 0, sizeof(*audio_buffer));
-    audio_buffer->capacity = settings->audio_buffer_capacity;
+    *audio_buffer_pptr = ring_create(settings->audio_buffer_capacity, sizeof(float));
+    UniformRing_t *audio_buffer = (UniformRing_t *)*audio_buffer_pptr;
 
     /// init portaudio
     PaError err;

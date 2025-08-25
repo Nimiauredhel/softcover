@@ -8,9 +8,7 @@
 typedef struct Memory Memory_t;
 typedef struct Texture Texture_t;
 typedef struct AudioClip AudioClip_t;
-typedef struct ByteRing ByteRing_t;
-typedef struct IntRing IntRing_t;
-typedef struct FloatRing FloatRing_t;
+typedef struct UniformRing UniformRing_t;
 
 struct Memory
 {
@@ -32,35 +30,20 @@ struct AudioClip
     float samples[];
 };
 
-struct IntRing
+struct UniformRing
 {
-    uint16_t capacity;
-    uint16_t length;
-    uint16_t head;
-    int32_t buffer[];
-};
-
-struct ByteRing
-{
-    uint16_t capacity;
-    uint16_t length;
-    uint16_t head;
+    uint32_t capacity;
+    uint32_t length;
+    uint32_t head;
+    uint8_t unit_size;
     uint8_t buffer[];
 };
 
-struct FloatRing
-{
-    uint16_t capacity;
-    uint16_t length;
-    uint16_t head;
-    float buffer[];
-};
-
-void int_ring_push(IntRing_t *ring, int *chunk, uint16_t len);
-bool int_ring_pop(IntRing_t *ring, int *out);
-void byte_ring_push(ByteRing_t *ring, uint8_t *chunk, uint16_t len);
-bool byte_ring_pop(ByteRing_t *ring, uint8_t *out);
-void float_ring_push(FloatRing_t *ring, float *chunk, uint16_t len);
-bool float_ring_pop(FloatRing_t *ring, float *out);
+UniformRing_t* ring_create(uint32_t capacity, uint8_t unit_size);
+void ring_init(UniformRing_t *ring, uint32_t capacity, uint8_t unit_size);
+uint32_t ring_push(UniformRing_t *ring, void *chunk, uint32_t len);
+bool ring_pop(UniformRing_t *ring, void *out);
+bool ring_peek(const UniformRing_t *ring, uint32_t offset, void *out, bool absolute);
+bool ring_peek_ptr(const UniformRing_t *ring, uint32_t offset, void **out_pptr, bool absolute);
 
 #endif

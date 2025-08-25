@@ -55,7 +55,7 @@ static AppMemoryPartition_t *app = NULL;
 static AppSerializable_t *serializables = NULL;
 static AppEphemeral_t *ephemerals = NULL;
 
-static char input_read_from_buffer(IntRing_t *input_buffer);
+static char input_read_from_buffer(UniformRing_t *input_buffer);
 static void input_process_all(void);
 static size_t load_texture_to_scratch(char *name);
 static size_t load_wav_to_scratch(char *name);
@@ -72,13 +72,13 @@ static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y);
 static void gfx_draw_thing(uint16_t thing_idx);
 static void gfx_draw_all_things(void);
 
-static char input_read_from_buffer(IntRing_t *input_buffer)
+static char input_read_from_buffer(UniformRing_t *input_buffer)
 {
     if (app == NULL || serializables == NULL) return '~';
 
     int c = '~';
 
-    if (int_ring_pop(input_buffer, &c)) return c;
+    if (ring_pop(input_buffer, &c)) return c;
     return '~';
 }
 
@@ -163,7 +163,7 @@ static size_t load_wav_to_scratch(char *name)
 static void audio_push_samples(float *samples, uint32_t len)
 {
     if (app == NULL || app->audio_buffer == NULL) return;
-    float_ring_push(app->audio_buffer, samples, len);
+    ring_push(app->audio_buffer, samples, len);
 }
 
 static void audio_push_clip(AudioClip_t *clip)
@@ -386,8 +386,8 @@ void app_setup(Platform_t *interface)
     size_t required_state_memory = sizeof(AppSerializable_t) + sizeof(AppEphemeral_t);
 
     size_t required_memory_total = required_state_memory + required_gfx_memory
-        + sizeof(FloatRing_t) + platform->settings->audio_buffer_capacity
-        + sizeof(ByteRing_t) + platform->settings->input_buffer_capacity;
+        + sizeof(UniformRing_t) + (sizeof(float) * platform->settings->audio_buffer_capacity)
+        + sizeof(UniformRing_t) + (sizeof(int) * platform->settings->input_buffer_capacity);
     
     bool sufficient = platform->capabilities->app_memory_max_bytes >= required_memory_total;
 

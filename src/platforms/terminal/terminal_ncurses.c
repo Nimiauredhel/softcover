@@ -156,7 +156,7 @@ int input_read(void)
     }
 }
 
-void input_push_to_buffer(PlatformSettings_t *settings, IntRing_t *input_buffer)
+void input_push_to_buffer(PlatformSettings_t *settings, UniformRing_t *input_buffer)
 {
     int c = '~';
 
@@ -169,7 +169,7 @@ void input_push_to_buffer(PlatformSettings_t *settings, IntRing_t *input_buffer)
             gfx_toggle_debug_mode();
             continue;
         }
-        int_ring_push(input_buffer, &c, 1);
+        ring_push(input_buffer, &c, 1);
     }
 }
 
@@ -195,7 +195,7 @@ void gfx_sync_buffer(Texture_t *gfx_buffer)
     wrefresh(main_window);
 }
 
-void gfx_audio_vis(const FloatRing_t *audio_buffer, float volume)
+void gfx_audio_vis(const UniformRing_t *audio_buffer, float volume)
 {
     werase(debug_window);
 
@@ -203,10 +203,12 @@ void gfx_audio_vis(const FloatRing_t *audio_buffer, float volume)
     float min_val = 0.0f;
     float max_abs_val = 0.0f;
 
-    for(uint16_t i = 0; i < audio_buffer->capacity; i++)
+    for(uint32_t i = 0; i < audio_buffer->capacity; i++)
     {
-        if (audio_buffer->buffer[i] > max_val) max_val = audio_buffer->buffer[i];
-        else if (audio_buffer->buffer[i] < min_val) min_val = audio_buffer->buffer[i];
+        float temp_val = 0.0f;
+        ring_peek(audio_buffer, i, &temp_val, true);
+        if (temp_val > max_val) max_val = temp_val;
+        else if (temp_val < min_val) min_val = temp_val;
     }
 
     max_abs_val = max_val;
@@ -227,7 +229,6 @@ void gfx_audio_vis(const FloatRing_t *audio_buffer, float volume)
         for (uint16_t j = 0; j < frames_per_column; j++)
         {
             count = j + (i * frames_per_column); 
-            uint16_t idx = (audio_buffer->head + count) % audio_buffer->capacity;
 
             int mid_color = count == 0 ? COLOR_PAIR_BG_CYAN : COLOR_PAIR_BG_BLUE;
 
@@ -236,19 +237,14 @@ void gfx_audio_vis(const FloatRing_t *audio_buffer, float volume)
             mvwaddch(debug_window, audiovis_mid_row * 3, i, ' ');
             wattroff(debug_window, COLOR_PAIR(mid_color));
 
-            if (!silence && count >= audio_buffer->length)
+            float val = 0.0f;
+
+            if (!ring_peek(audio_buffer, count, &val, false))
             {
                 silence = true;
             }
 
-            if (idx % 2 == 0)
-            {
-                frame_sums_stereo[0] += audio_buffer->buffer[idx];
-            }
-            else
-            {
-                frame_sums_stereo[1] += audio_buffer->buffer[idx];
-            }
+            frame_sums_stereo[count % 2 != 0] += val;
         }
 
         for (int8_t j = 0; j < 2; j++)
@@ -281,15 +277,11 @@ void gfx_audio_vis(const FloatRing_t *audio_buffer, float volume)
     wrefresh(debug_window);
 }
 
-void input_init(PlatformSettings_t *settings, IntRing_t **input_buffer_pptr)
+void input_init(PlatformSettings_t *settings, UniformRing_t **input_buffer_pptr)
 {
     keypad(main_window, true);
     /// init input buffer
-    *input_buffer_pptr = (IntRing_t *)malloc(sizeof(IntRing_t) +
-    (sizeof(int) * settings->input_buffer_capacity));
-    IntRing_t *input_buffer = (IntRing_t *)*input_buffer_pptr;
-    memset(input_buffer, 0, sizeof(*input_buffer));
-    input_buffer->capacity = settings->input_buffer_capacity;
+    *input_buffer_pptr = ring_create(settings->input_buffer_capacity, sizeof(int));
 }
 
 bool gfx_is_initialized(void)

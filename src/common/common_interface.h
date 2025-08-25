@@ -78,9 +78,9 @@ struct AppMemoryPartition
     Memory_t *serializable;
     Memory_t *ephemeral;
 
-    IntRing_t *input_buffer;
+    UniformRing_t *input_buffer;
     Texture_t *gfx_buffer;
-    FloatRing_t *audio_buffer;
+    UniformRing_t *audio_buffer;
 };
 
 #endif
