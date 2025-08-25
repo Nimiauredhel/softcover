@@ -68,7 +68,7 @@ void gfx_refresh_debug_window(DebugRing_t *debug_ring, bool is_break)
     werase(debug_window);
 
     wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
-    mvwprintw(debug_window, 0, 0, "%s", is_break ? "BREAK - c to continue" : "DEBUG");
+    mvwprintw(debug_window, 0, 0, "%s", is_break ? "BREAK" : "DEBUG");
     wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
 
     int32_t mod = debug_ring->len - debug_window_height;
@@ -78,7 +78,7 @@ void gfx_refresh_debug_window(DebugRing_t *debug_ring, bool is_break)
     for (uint16_t i = 1; i < debug_ring->len; i++)
     {
         wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BG_BLACK));
-        mvwprintw(debug_window, i, 0, "[%u]%u: %s", idx, i, debug_ring->debug_messages[idx]);
+        mvwprintw(debug_window, i, 0, "[%u]%s", idx, debug_ring->debug_messages[idx]);
         wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
 
         idx = (idx + 1) % DEBUG_RING_CAPACITY;

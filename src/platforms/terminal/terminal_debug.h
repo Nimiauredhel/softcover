@@ -8,8 +8,8 @@
 
 typedef struct DebugRing
 {
-    uint8_t head;
-    uint8_t len;
+    uint16_t head;
+    uint16_t len;
     char debug_messages[DEBUG_RING_CAPACITY][DEBUG_MESSAGE_MAX_LEN];
 } DebugRing_t;
 
