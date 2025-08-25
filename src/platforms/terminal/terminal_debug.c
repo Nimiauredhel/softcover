@@ -4,9 +4,26 @@
 static bool debug_is_break = false;
 static DebugRing_t debug_ring = {0};
 
-void debug_refresh_gfx(void)
+void debug_dump_log(void)
 {
-    gfx_refresh_debug_window(&debug_ring, debug_is_break);
+    char buff[DEBUG_MESSAGE_MAX_LEN] = {0};
+
+    if (gfx_is_initialized())
+    {
+        gfx_refresh_debug_window(&debug_ring, debug_is_break);
+    }
+    else
+    {
+        printf("== LOG DUMP ==\n");
+
+        for (uint16_t i = 0; i < debug_ring.len; i++)
+        {
+            snprintf(buff, sizeof(buff), "%s", debug_ring.debug_messages[(debug_ring.head+i) % DEBUG_RING_CAPACITY]);
+            printf("%s\n", buff);
+        }
+
+        printf("== END LOG DUMP ==\n");
+    }
 }
 
 void debug_log(char *message)
@@ -26,7 +43,7 @@ void debug_log(char *message)
 
     if (gfx_is_initialized())
     {
-        debug_refresh_gfx();
+        debug_dump_log();
     }
     else
     {
@@ -39,7 +56,7 @@ void debug_break(void)
     if (gfx_is_initialized())
     {
         debug_is_break = true;
-        debug_refresh_gfx();
+        debug_dump_log();
     }
 
     char c = '~';

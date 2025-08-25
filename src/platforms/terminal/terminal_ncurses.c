@@ -54,7 +54,7 @@ void gfx_toggle_debug_mode(void)
         main_window_current_width =  main_window_partial_width;
         main_window_current_height = main_window_partial_height;
         wresize(main_window, main_window_current_height, main_window_current_width);
-        debug_refresh_gfx();
+        debug_dump_log();
         break;
     case GFX_DEBUG_AUDIO:
     case GFX_DEBUG_MAXVAL:
@@ -71,16 +71,17 @@ void gfx_refresh_debug_window(DebugRing_t *debug_ring, bool is_break)
     mvwprintw(debug_window, 0, 0, "%s", is_break ? "BREAK - c to continue" : "DEBUG");
     wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
 
-    uint8_t idx = debug_ring->head;
+    int32_t mod = debug_ring->len - (debug_window_height + 1);
+    if (mod < 0) mod = 0;
+    uint16_t idx = (debug_ring->head + mod) % DEBUG_RING_CAPACITY;;
 
-    for (uint8_t i = 1; i < debug_ring->len; i++)
+    for (uint16_t i = 1; i < debug_ring->len; i++)
     {
         wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BG_BLACK));
         mvwprintw(debug_window, i, 0, "[%u]%u: %s", idx, i, debug_ring->debug_messages[idx]);
         wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
 
-        idx++;
-        if (idx >= DEBUG_RING_CAPACITY) idx = 0;
+        idx = (idx + 1) % DEBUG_RING_CAPACITY;
     }
 
     wrefresh(debug_window);

@@ -53,12 +53,12 @@ static void set_audio(PaStream *stream, bool active)
     {
         if (active)
         {
-            debug_log("Starting audio stream");
+            debug_log("Starting audio stream.");
             err = Pa_StartStream(stream);
         }
         else
         {
-            debug_log("Stopping audio stream");
+            debug_log("Stopping audio stream.");
             err = Pa_StopStream(stream); 
         }
     }

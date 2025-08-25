@@ -206,11 +206,11 @@ void set_should_terminate(bool value)
 
 static void load_app(void)
 {
-    debug_log("Loading app layer.\n");
+    debug_log("Loading app layer.");
 
     if (lib_handle != NULL)
     {
-        debug_log("Closing previously loaded handle.\n");
+        debug_log("Closing previously loaded handle.");
         dlclose(lib_handle);
         lib_handle = NULL;
         func_handle = NULL;
@@ -220,7 +220,7 @@ static void load_app(void)
 
     if (lib_handle == NULL )
     {
-        snprintf(platform_top_debug_buff, sizeof(platform_top_debug_buff), "Failed to load [%s]: %s\n", lib_path, dlerror());
+        snprintf(platform_top_debug_buff, sizeof(platform_top_debug_buff), "Failed to load [%s]: %s", lib_path, dlerror());
         debug_log(platform_top_debug_buff);
         should_terminate = true;
         return;
@@ -245,17 +245,17 @@ int main(int argc, char **argv)
     initialize_signal_handler();
 
     debug_init();
-    debug_log("Program started.\n");
+    debug_log("Program started.");
 
     if (argc > 1)
     {
         snprintf(lib_path, sizeof(lib_path), "%s", argv[1]);
-        snprintf(platform_top_debug_buff, sizeof(platform_top_debug_buff), "Using given library path: %s.\n", lib_path);
+        snprintf(platform_top_debug_buff, sizeof(platform_top_debug_buff), "Using given library path: %s.", lib_path);
         debug_log(platform_top_debug_buff);
     }
     else
     {
-        snprintf(platform_top_debug_buff, sizeof(platform_top_debug_buff), "Using default library path: %s.\n", lib_path);
+        snprintf(platform_top_debug_buff, sizeof(platform_top_debug_buff), "Using default library path: %s.", lib_path);
         debug_log(platform_top_debug_buff);
     }
 
@@ -312,7 +312,7 @@ int main(int argc, char **argv)
 
         if (lib_modified_time != lib_load_time)
         {
-            debug_log("App modification detected.\n");
+            debug_log("App modification detected.");
             load_app();
         }
 
@@ -332,7 +332,7 @@ platform_termination:
 
     if (lib_handle != NULL)
     {
-        debug_log("Closing previously loaded handle.\n");
+        debug_log("Closing previously loaded handle.");
         dlclose(lib_handle);
         lib_handle = NULL;
         func_handle = NULL;
@@ -347,8 +347,8 @@ platform_termination:
     free(app_memory.gfx_buffer);
     free(app_memory.audio_buffer);
 
-    debug_log("Program halted, press ENTER to quit.");
-    debug_break();
+    debug_log("Terminating.");
+    debug_dump_log();
 
     return EXIT_SUCCESS;
 }

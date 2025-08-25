@@ -276,6 +276,8 @@ static uint16_t thing_test_collision(uint16_t thing_id)
         if ((dist_x < (serializables->things[thing_id].coll_width + serializables->things[i].coll_width) / 2)
          && (dist_y < (serializables->things[thing_id].coll_height + serializables->things[i].coll_height) / 2))
         {
+            snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Thing %d collided with Thing %d.", thing_id, i);
+            platform->debug_log(ephemerals->debug_buff);
             return i;
         }
     }
@@ -372,7 +374,7 @@ void app_setup(Platform_t *interface)
 
     platform->settings->gfx_pixel_size_bytes = 1;
     platform->settings->gfx_buffer_width = 156;
-    platform->settings->gfx_buffer_height = 36;
+    platform->settings->gfx_buffer_height = 32;
 
     size_t required_gfx_memory = 
     platform->settings->gfx_pixel_size_bytes *

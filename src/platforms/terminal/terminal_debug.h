@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define DEBUG_RING_CAPACITY (32)
+#define DEBUG_RING_CAPACITY (256)
 #define DEBUG_MESSAGE_MAX_LEN (256)
 
 typedef struct DebugRing
@@ -13,7 +13,7 @@ typedef struct DebugRing
     char debug_messages[DEBUG_RING_CAPACITY][DEBUG_MESSAGE_MAX_LEN];
 } DebugRing_t;
 
-void debug_refresh_gfx(void);
+void debug_dump_log(void);
 void debug_log(char *message);
 void debug_break(void);
 void debug_init(void);
