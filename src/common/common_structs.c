@@ -3,7 +3,7 @@
 
 UniformRing_t* ring_create(uint32_t capacity, uint8_t unit_size)
 {
-    UniformRing_t *ring_ptr = malloc(capacity * unit_size);
+    UniformRing_t *ring_ptr = malloc(sizeof(UniformRing_t) + (capacity * unit_size));
     ring_init(ring_ptr, capacity, unit_size);
     return ring_ptr;
 }
