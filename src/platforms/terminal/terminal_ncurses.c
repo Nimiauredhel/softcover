@@ -286,7 +286,7 @@ void input_init(PlatformSettings_t *settings, IntRing_t **input_buffer_pptr)
     keypad(main_window, true);
     /// init input buffer
     *input_buffer_pptr = (IntRing_t *)malloc(sizeof(IntRing_t) +
-    settings->input_buffer_capacity);
+    (sizeof(int) * settings->input_buffer_capacity));
     IntRing_t *input_buffer = (IntRing_t *)*input_buffer_pptr;
     memset(input_buffer, 0, sizeof(*input_buffer));
     input_buffer->capacity = settings->input_buffer_capacity;
