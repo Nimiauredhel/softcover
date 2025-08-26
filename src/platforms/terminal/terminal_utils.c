@@ -98,12 +98,15 @@ size_t storage_load_text(const char *name, char *dest, size_t max_len)
         return 0;
     }
 
+    snprintf(debug_buff, sizeof(debug_buff), "Opened text file %s.", name);
+    debug_log(debug_buff);
+
     char *line = NULL;
     size_t line_len = 0;
 
     do
     {
-        line = fgets(dest, remaining, file);
+        line = fgets(dest+read, remaining, file);
 
         if (line != NULL)
         {
@@ -143,7 +146,6 @@ void gfx_load_texture(char *name, Texture_t *dest)
         snprintf(debug_buff, sizeof(debug_buff), "Error code %d while loading %s (%dx%dx%d).",
             ret, name, dest->width, dest->height, dest->pixel_size_bytes);
         debug_log(debug_buff);
-        debug_break();
     }
 
     if (temp_buff != NULL)
@@ -166,15 +168,21 @@ void gfx_load_texture(char *name, Texture_t *dest)
     }
 }
 
-void audio_load_wav(char *name, AudioClip_t *dest)
+bool audio_load_wav(char *name, AudioClip_t *dest)
 {
 #define BLOCK_SIZE (256)
 
     static char debug_buff[DEBUG_MESSAGE_MAX_LEN] = {0};
 
     TinyWav tw;
-    tinywav_open_read(&tw, name,
-    TW_INTERLEAVED); // LRLRLRLRLRLRLRLRLR
+    int ret = tinywav_open_read(&tw, name, TW_INTERLEAVED); // LRLRLRLRLRLRLRLRLR
+
+    if (ret < 0)
+    {
+        snprintf(debug_buff, sizeof(debug_buff), "Failed to load WAV files %s.", name);
+        debug_log(debug_buff);
+        return false;
+    }
 
     uint8_t num_channels = tw.h.NumChannels;
     uint32_t num_samples = tw.h.Subchunk2Size / num_channels * tw.h.BitsPerSample / 8;
@@ -199,4 +207,5 @@ void audio_load_wav(char *name, AudioClip_t *dest)
     }
 
     tinywav_close_read(&tw);
+    return true;
 }

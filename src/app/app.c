@@ -42,10 +42,10 @@ typedef struct AppEphemera
     char debug_buff[DEBUG_MESSAGE_MAX_LEN];
     uint8_t scratch[APP_SCRATCH_SIZE];
 
-    uint16_t sfx_count;
-    size_t sfx_indices[APP_SFX_MAX_COUNT];
+    uint16_t sounds_count;
+    size_t sound_indices[APP_SFX_MAX_COUNT];
 
-    uint16_t texture_count;
+    uint16_t textures_count;
     size_t texture_indices[APP_TEXTURES_MAX_COUNT];
 
     int32_t things_draw_order_layer_offsets[APP_LAYER_COUNT];
@@ -160,8 +160,8 @@ static size_t load_texture_to_memory(char *name)
     size_t size = sizeof(Texture_t) + (texture_ptr->height * texture_ptr->width * texture_ptr->pixel_size_bytes);
     ephemerals->bump_used += size;
 
-    ephemerals->texture_indices[ephemerals->texture_count] = index;
-    ephemerals->texture_count++;
+    ephemerals->texture_indices[ephemerals->textures_count] = index;
+    ephemerals->textures_count++;
 
     return index;
 }
@@ -201,8 +201,8 @@ static size_t load_wav_to_memory(char *name)
     size_t size = sizeof(AudioClip_t) + (sizeof(float) * clip_ptr->num_samples);
     ephemerals->bump_used += size;
     
-    ephemerals->sfx_indices[ephemerals->sfx_count] = index;
-    ephemerals->sfx_count++;
+    ephemerals->sound_indices[ephemerals->sounds_count] = index;
+    ephemerals->sounds_count++;
 
     return index;
 }
@@ -626,6 +626,56 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
         serializables->things_count = 0;
         explicit_bzero(serializables->things, sizeof(Thing_t) * APP_THINGS_MAX_COUNT);
 
+        /// load all textures according to file
+        size_t txt_len = 0;
+
+        bzero(ephemerals->scratch, APP_SCRATCH_SIZE);
+        txt_len = platform->storage_load_text("textures.soft", (char *)ephemerals->scratch, APP_SCRATCH_SIZE);
+
+        if (txt_len > 0)
+        {
+            char *current_line = (char *)ephemerals->scratch;
+            char *next_line = NULL;
+
+            while (current_line != NULL && ephemerals->textures_count < APP_TEXTURES_MAX_COUNT)
+            {
+                next_line = strchr(current_line, '\n');
+                if (next_line) *next_line = '\0';
+                
+                if (strlen(current_line) > 5)
+                {
+                    load_texture_to_memory(current_line);
+                }
+
+                //if (next_line) *next_line = '\n';
+                current_line = next_line ? next_line + 1 : NULL;
+            }
+        }
+
+        bzero(ephemerals->scratch, APP_SCRATCH_SIZE);
+        txt_len = platform->storage_load_text("sounds.soft", (char *)ephemerals->scratch, APP_SCRATCH_SIZE);
+
+        if (txt_len > 0)
+        {
+            char *current_line = (char *)ephemerals->scratch;
+            char *next_line = NULL;
+
+            while (current_line != NULL && ephemerals->textures_count < APP_SFX_MAX_COUNT)
+            {
+                next_line = strchr(current_line, '\n');
+                if (next_line) *next_line = '\0';
+                
+                if (strlen(current_line) > 5)
+                {
+                    load_wav_to_memory(current_line);
+                }
+
+                //if (next_line) *next_line = '\n';
+                current_line = next_line ? next_line + 1 : NULL;
+            }
+        }
+
+        /*
         size_t thing1_texture_idx = load_texture_to_memory("textures/thing1.bmp");
         size_t thing2_texture_idx = load_texture_to_memory("textures/thing2.bmp");
         size_t pillar_texture_idx = load_texture_to_memory("textures/pillar_iso_hstretch.bmp");
@@ -633,6 +683,7 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
         size_t floor_texture_idx = load_texture_to_memory("textures/floor_hstretch.bmp");
         size_t sfx01_idx = load_wav_to_memory("sfx/sfx01.wav");
         size_t sfx02_idx = load_wav_to_memory("sfx/sfx02.wav");
+        */
 
         uint16_t thing_idx;
 
@@ -643,7 +694,7 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
             thing_set_texture(thing_idx, i == 0 ? ephemerals->texture_indices[0] : ephemerals->texture_indices[1], 4, 6, 6, 2);
             thing_set_pos(thing_idx, 24*(i+1), 8);
 
-            thing_set_move_sfx(thing_idx, i == 0 ? ephemerals->sfx_indices[0] : ephemerals->sfx_indices[1]);
+            thing_set_move_sfx(thing_idx, i == 0 ? ephemerals->sound_indices[0] : ephemerals->sound_indices[1]);
         }
 
         for (int i = 0; i < 7; i++)
