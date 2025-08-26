@@ -6,11 +6,9 @@
 #include "common_interface.h"
 #include "common_structs.h"
 
-#define APP_TEST_AUDIO_SAMPLE_LEN (8192)
 #define APP_SCRATCH_SIZE (1024*2048)
 #define APP_THINGS_MAX_COUNT (256)
 #define APP_THINGS_LAYER_COUNT (6)
-#define APP_CLIPS_COUNT (2)
 
 typedef struct Thing
 {
@@ -39,7 +37,6 @@ typedef struct AppSerializables
     uint16_t things_count;
     uint16_t controlled_thing_idx;
     Thing_t things[APP_THINGS_MAX_COUNT];
-    size_t audio_clip_indices[APP_CLIPS_COUNT];
 } AppSerializable_t;
 
 typedef struct AppEphemera
@@ -61,7 +58,7 @@ static void input_process_all(void);
 static size_t load_texture_to_scratch(char *name);
 static size_t load_wav_to_scratch(char *name);
 
-static void audio_push_samples(float *samples, uint32_t len);
+static void audio_push_samples(float *samples, uint32_t len, uint8_t channels);
 static void audio_push_clip(AudioClip_t *clip);
 
 static void things_initialize_draw_order(void);
@@ -70,16 +67,16 @@ static void things_get_distance(uint16_t first_thing_id, uint16_t second_thing_i
 static uint16_t thing_test_collision(uint16_t thing_id);
 static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta);
 static int32_t thing_create(uint8_t layer);
-static void thing_set_pos(uint16_t thing_id, int16_t x, int16_t y);
-static void thing_set_texture(uint16_t thing_id, uint16_t texture_id, int16_t x_offset, int16_t y_offset, int16_t coll_width, int16_t coll_height);
-static void thing_set_move_sfx(uint16_t thing_id, uint16_t sfx_id);
+static void thing_set_pos(uint32_t thing_id, int16_t x, int16_t y);
+static void thing_set_texture(uint32_t thing_id, uint32_t texture_id, int16_t x_offset, int16_t y_offset, int16_t coll_width, int16_t coll_height);
+static void thing_set_move_sfx(uint32_t thing_id, uint32_t sfx_id);
 static int8_t things_compare_y(Thing_t *first, Thing_t *second);
 static int8_t things_compare_layer(Thing_t *first, Thing_t *second);
-static void things_sort_by_comparer(uint16_t start_idx, uint16_t end_idx, int8_t (*comparer)(Thing_t*, Thing_t*));
+static void things_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t (*comparer)(Thing_t*, Thing_t*));
 
 static void gfx_clear_buffer(void);
 static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y);
-static void gfx_draw_thing(uint16_t thing_idx);
+static void gfx_draw_thing(uint32_t thing_idx);
 static void gfx_draw_all_things(void);
 
 static char input_read_from_buffer(UniformRing_t *input_buffer)
@@ -159,26 +156,65 @@ static size_t load_texture_to_scratch(char *name)
 
 static size_t load_wav_to_scratch(char *name)
 {
-    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Loading wav '%s' to scratch memory.", name);
-    platform->debug_log(ephemerals->debug_buff);
-
     size_t index = ephemerals->scratch.used;
     AudioClip_t *clip_ptr = (AudioClip_t *)(ephemerals->scratch.buff+index);
+
+    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Loading wav '%s' to scratch memory at offset %lu.", name, index);
+    platform->debug_log(ephemerals->debug_buff);
+
     platform->audio_load_wav(name, clip_ptr);
+
+    /// TODO: finish implementing trim_silence
+    /*
+    bool trim_silence = true;
+
+    if (trim_silence)
+    {
+        size_t end_idx = clip_ptr->num_samples - 1;
+
+        while(end_idx > 3
+            && clip_ptr->samples[end_idx] == clip_ptr->samples[end_idx-2]
+            && clip_ptr->samples[end_idx-1] == clip_ptr->samples[end_idx-3])
+        {
+            clip_ptr->num_samples -= 2;
+            end_idx = clip_ptr->num_samples - 1;
+        }
+
+        snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Trimmed wav '%s', final size: %lu.",
+                name, sizeof(AudioClip_t) + (sizeof(float) * clip_ptr->num_samples));
+        platform->debug_log(ephemerals->debug_buff);
+    }
+    */
+
     size_t size = sizeof(AudioClip_t) + (sizeof(float) * clip_ptr->num_samples);
     ephemerals->scratch.used += size;
+
     return index;
 }
 
-static void audio_push_samples(float *samples, uint32_t len)
+static void audio_push_samples(float *samples, uint32_t len, uint8_t channels)
 {
     if (app == NULL || app->audio_buffer == NULL) return;
-    ring_push(app->audio_buffer, samples, len);
+
+    if (channels == platform->settings->audio_channels)
+    {
+        ring_push(app->audio_buffer, samples, len, false);
+    }
+    else
+    {
+        for (uint32_t i = 0; i < len; i+= channels)
+        {
+            for (uint8_t j = 0; j < platform->settings->audio_channels; j++)
+            {
+                ring_push(app->audio_buffer, samples+i+j, 1, false);
+            }
+        }
+    }
 }
 
 static void audio_push_clip(AudioClip_t *clip)
 {
-    audio_push_samples(clip->samples, clip->num_samples);
+    audio_push_samples(clip->samples, clip->num_samples, clip->num_channels);
 }
 
 static int32_t thing_create(uint8_t layer)
@@ -202,7 +238,7 @@ static int32_t thing_create(uint8_t layer)
     return index;
 }
 
-static void thing_set_pos(uint16_t thing_id, int16_t x, int16_t y)
+static void thing_set_pos(uint32_t thing_id, int16_t x, int16_t y)
 {
     serializables->things[thing_id].x_pos = x;
     serializables->things[thing_id].y_pos = y;
@@ -213,7 +249,7 @@ static void thing_set_pos(uint16_t thing_id, int16_t x, int16_t y)
     */
 }
 
-static void thing_set_texture(uint16_t thing_id, uint16_t texture_id, int16_t x_offset, int16_t y_offset, int16_t coll_width, int16_t coll_height)
+static void thing_set_texture(uint32_t thing_id, uint32_t texture_id, int16_t x_offset, int16_t y_offset, int16_t coll_width, int16_t coll_height)
 {
     serializables->things[thing_id].texture_idx = texture_id;
     serializables->things[thing_id].x_offset = x_offset;
@@ -227,7 +263,7 @@ static void thing_set_texture(uint16_t thing_id, uint16_t texture_id, int16_t x_
     */
 }
 
-static void thing_set_move_sfx(uint16_t thing_id, uint16_t sfx_id)
+static void thing_set_move_sfx(uint32_t thing_id, uint32_t sfx_id)
 {
     serializables->things[thing_id].move_sfx_idx = sfx_id;
     /*
@@ -246,7 +282,7 @@ static int8_t things_compare_layer(Thing_t *first, Thing_t *second)
     return first->layer - second->layer;
 }
 
-static void things_sort_by_comparer(uint16_t start_idx, uint16_t end_idx, int8_t (*comparer)(Thing_t*, Thing_t*))
+static void things_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t (*comparer)(Thing_t*, Thing_t*))
 {
     uint16_t temp;
     bool swapped = false;
@@ -446,7 +482,7 @@ static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y)
     }
 }
 
-static void gfx_draw_thing(uint16_t thing_idx)
+static void gfx_draw_thing(uint32_t thing_idx)
 {
     if (!serializables->things[thing_idx].used) return;
     gfx_draw_texture((Texture_t *)(ephemerals->scratch.buff+serializables->things[thing_idx].texture_idx),
@@ -499,7 +535,7 @@ void app_setup(Platform_t *interface)
     platform->settings->gfx_frame_time_target_us = 16666;
 
     platform->settings->gfx_pixel_size_bytes = 1;
-    platform->settings->gfx_buffer_width = 156;
+    platform->settings->gfx_buffer_width = 148;
     platform->settings->gfx_buffer_height = 32;
 
     size_t required_gfx_memory = 
@@ -507,7 +543,8 @@ void app_setup(Platform_t *interface)
     platform->settings->gfx_buffer_width *
     platform->settings->gfx_buffer_height;
 
-    platform->settings->audio_buffer_capacity = 32768;
+    platform->settings->audio_channels = 2;
+    platform->settings->audio_buffer_capacity = 48000;
 
     platform->settings->input_buffer_capacity = 128;
 
@@ -627,7 +664,6 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
         serializables->initialized = true;
     }
 
-    /// section combining serializables and ephemerals
     things_initialize_draw_order();
     things_update_draw_order();
 }

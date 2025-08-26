@@ -61,6 +61,7 @@ static const PlatformCapabilities_t capabilities =
 
     .gfx_frame_time_min_us = 8333,
 
+    .audio_channels_max = 2,
     .audio_buffer_capacity_max = 65534,
 
     .input_buffer_capacity_max = 1024,
@@ -77,6 +78,7 @@ static const PlatformSettings_t default_settings =
 
     .gfx_frame_time_target_us = capabilities.gfx_frame_time_min_us*2,
 
+    .audio_channels = 2,
     .audio_buffer_capacity = 16384,
 
     .input_buffer_capacity = 128,
@@ -300,12 +302,12 @@ int main(int argc, char **argv)
         {
         }
 
+        gfx_sync_buffer(app_memory.gfx_buffer);
+
         if (gfx_get_debug_mode() == GFX_DEBUG_AUDIO)
         {
-            gfx_audio_vis(app_memory.audio_buffer, audio_get_volume());
+            gfx_audio_vis(app_memory.audio_buffer, &platform_settings, audio_get_volume());
         }
-
-        gfx_sync_buffer(app_memory.gfx_buffer);
 
         stat(lib_path, &file_stat);
         lib_modified_time = file_stat.st_mtime;

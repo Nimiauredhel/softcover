@@ -17,22 +17,34 @@ void ring_init(UniformRing_t *ring, uint32_t capacity, uint8_t unit_size)
     bzero(ring->buffer, ring->capacity * ring->unit_size);
 }
 
-uint32_t ring_push(UniformRing_t *ring, void *chunk, uint32_t len)
+uint32_t ring_push(UniformRing_t *ring, void *chunk, uint32_t len, bool overwrite_on_collision)
 {
     uint8_t *cast_chunk = (uint8_t *)chunk;
-    uint16_t start_idx = (ring->head + ring->length) % ring->capacity;
+    uint32_t start_idx = (ring->head + ring->length) % ring->capacity;
     uint32_t pushed_count = 0;
 
     for (uint32_t i = 0; i < len; i++)
     {
-        if (ring->length >= ring->capacity) break;
-
-        uint32_t idx = start_idx + i;
-        if (idx >= ring->capacity) idx -= ring->capacity;
+        uint32_t idx = (start_idx + i) % ring->capacity;
         memcpy(ring->buffer+(idx*ring->unit_size), cast_chunk+(i*ring->unit_size), ring->unit_size);
 
         pushed_count++;
-        ring->length++;
+
+        if (ring->length >= ring->capacity)
+        {
+            if (overwrite_on_collision)
+            {
+                ring->head = (ring->head + 1) % ring->capacity;
+            }
+            else
+            {
+                break;
+            }
+        }
+        else
+        {
+            ring->length++;
+        }
     }
 
     return pushed_count;

@@ -23,7 +23,7 @@ void gfx_toggle_debug_mode(void);
 void gfx_refresh_debug_window(DebugRing_t *debug_ring, bool is_break);
 void gfx_clear_buffer(Texture_t *gfx_buffer);
 void gfx_sync_buffer(Texture_t *gfx_buffer);
-void gfx_audio_vis(const UniformRing_t *audio_buffer, float volume);
+void gfx_audio_vis(const UniformRing_t *audio_buffer, const PlatformSettings_t *settings, float volume);
 void input_init(PlatformSettings_t *settings, UniformRing_t **input_buffer_pptr);
 bool gfx_is_initialized(void);
 void gfx_init(PlatformSettings_t *settings, Texture_t **gfx_buffer);

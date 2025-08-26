@@ -170,7 +170,7 @@ void input_push_to_buffer(PlatformSettings_t *settings, UniformRing_t *input_buf
             gfx_toggle_debug_mode();
             continue;
         }
-        ring_push(input_buffer, &c, 1);
+        ring_push(input_buffer, &c, 1, false);
     }
 }
 
@@ -196,7 +196,7 @@ void gfx_sync_buffer(Texture_t *gfx_buffer)
     wrefresh(main_window);
 }
 
-void gfx_audio_vis(const UniformRing_t *audio_buffer, float volume)
+void gfx_audio_vis(const UniformRing_t *audio_buffer, const PlatformSettings_t *settings, float volume)
 {
     werase(debug_window);
 
@@ -225,6 +225,7 @@ void gfx_audio_vis(const UniformRing_t *audio_buffer, float volume)
 
     for (uint16_t i = 0; i < debug_window_width; i++)
     {
+        silence = false;
         float frame_sums_stereo[2] = { 0.0f, 0.0f };
 
         for (uint16_t j = 0; j < frames_per_column; j++)
@@ -248,14 +249,14 @@ void gfx_audio_vis(const UniformRing_t *audio_buffer, float volume)
             frame_sums_stereo[count % 2 != 0] += val;
         }
 
-        for (int8_t j = 0; j < 2; j++)
+        for (int8_t j = 0; j < settings->audio_channels; j++)
         {
             float value = norm * (frame_sums_stereo[j] / (frames_per_column * 0.5f));
             float dir = value > 0.0f ? 1.0f : -1.0f;
             
             int max_height_abs = audiovis_mid_row * value * dir;
-            int color_pair = silence ? COLOR_PAIR_BG_BLUE
-                : value > 0.0f ? COLOR_PAIR_BG_GREEN : COLOR_PAIR_BG_RED;
+            int color_pair = silence ? (value > 0.0f ? COLOR_PAIR_BG_CYAN : COLOR_PAIR_BG_BLUE)
+                : (value > 0.0f ? COLOR_PAIR_BG_GREEN : COLOR_PAIR_BG_RED);
 
             wattron(debug_window, COLOR_PAIR(color_pair));
 

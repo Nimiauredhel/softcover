@@ -27,6 +27,7 @@ struct Texture
 struct AudioClip
 {
     uint32_t num_samples;
+    uint8_t num_channels;
     float samples[];
 };
 
@@ -41,7 +42,7 @@ struct UniformRing
 
 UniformRing_t* ring_create(uint32_t capacity, uint8_t unit_size);
 void ring_init(UniformRing_t *ring, uint32_t capacity, uint8_t unit_size);
-uint32_t ring_push(UniformRing_t *ring, void *chunk, uint32_t len);
+uint32_t ring_push(UniformRing_t *ring, void *chunk, uint32_t len, bool overwrite_on_collision);
 bool ring_pop(UniformRing_t *ring, void *out);
 bool ring_peek(const UniformRing_t *ring, uint32_t offset, void *out, bool absolute);
 bool ring_peek_ptr(const UniformRing_t *ring, uint32_t offset, void **out_pptr, bool absolute);

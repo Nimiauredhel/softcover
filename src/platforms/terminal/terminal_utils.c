@@ -131,19 +131,26 @@ void audio_load_wav(char *name, AudioClip_t *dest)
     tinywav_open_read(&tw, name,
     TW_INTERLEAVED); // LRLRLRLRLRLRLRLRLR
 
-    uint32_t num_samples = tw.h.Subchunk2Size / tw.h.NumChannels * tw.h.BitsPerSample / 8;
-    uint32_t num_blocks = num_samples / BLOCK_SIZE;
-    size_t clip_size = sizeof(AudioClip_t) + (sizeof(float) * num_samples);
+    uint8_t num_channels = tw.h.NumChannels;
+    uint32_t num_samples = tw.h.Subchunk2Size / num_channels * tw.h.BitsPerSample / 8;
+    size_t clip_size = sizeof(AudioClip_t) + ((sizeof(float) * num_samples));
 
-    snprintf(debug_buff, sizeof(debug_buff), "Loading WAV file '%s', size: %lu bytes.", name, clip_size);
+    snprintf(debug_buff, sizeof(debug_buff), "Loading WAV file '%s', channels: %u,  size: %lu bytes.", name, num_channels, clip_size);
     debug_log(debug_buff);
 
-    memset(dest, 0, clip_size);
+    bzero(dest, clip_size);
+    dest->num_channels = num_channels;
     dest->num_samples = num_samples;
 
-    for (uint32_t i = 0; i < num_blocks; i++) 
+    uint32_t index = 0;
+    uint32_t remaining = num_samples;
+
+    while(remaining > 0)
     {
-        tinywav_read_f(&tw, dest->samples+(num_blocks*i), BLOCK_SIZE);
+        uint32_t to_write = remaining > BLOCK_SIZE ? BLOCK_SIZE : remaining;
+        tinywav_read_f(&tw, &dest->samples[index], to_write);
+        index += to_write;
+        remaining -= to_write;
     }
 
     tinywav_close_read(&tw);

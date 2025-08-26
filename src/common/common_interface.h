@@ -29,7 +29,8 @@ struct PlatformCapabilities
 
     useconds_t gfx_frame_time_min_us;
 
-    uint16_t audio_buffer_capacity_max;
+    uint8_t audio_channels_max;
+    uint32_t audio_buffer_capacity_max;
 
     uint16_t input_buffer_capacity_max;
 };
@@ -45,7 +46,8 @@ struct PlatformSettings
 
     useconds_t gfx_frame_time_target_us;
 
-    uint16_t audio_buffer_capacity;
+    uint8_t audio_channels;
+    uint32_t audio_buffer_capacity;
 
     uint16_t input_buffer_capacity;
 };

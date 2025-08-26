@@ -40,26 +40,26 @@ static int paStreamCallback(const void *inputBuffer, void *outputBuffer, unsigne
     return 0;
 }
 
-static void set_audio(PaStream *stream, bool active)
+void audio_set_active(bool active)
 {
     static char debug_buff[DEBUG_MESSAGE_MAX_LEN] = {0};
 
     if (!audio_is_initialized) return;
 
     PaError err = paNoError;
-    bool was_active = Pa_IsStreamActive(stream);
+    bool was_active = Pa_IsStreamActive(audio_stream);
 
     if (active != was_active)
     {
         if (active)
         {
             debug_log("Starting audio stream.");
-            err = Pa_StartStream(stream);
+            err = Pa_StartStream(audio_stream);
         }
         else
         {
             debug_log("Stopping audio stream.");
-            err = Pa_StopStream(stream); 
+            err = Pa_StopStream(audio_stream); 
         }
     }
 
@@ -127,7 +127,7 @@ void audio_init(PlatformSettings_t *settings, UniformRing_t **audio_buffer_pptr)
     }
 
     audio_is_initialized = true;
-    set_audio(audio_stream, true);
+    audio_set_active(true);
 }
 
 void audio_deinit(void)
@@ -142,7 +142,7 @@ void audio_deinit(void)
 
     if (audio_stream != NULL)
     {
-        set_audio(audio_stream, false);
+        audio_set_active(false);
         err = Pa_CloseStream(audio_stream);
         audio_stream = NULL;
 
