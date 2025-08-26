@@ -101,6 +101,7 @@ static const Platform_t platform =
     /// storage
     .gfx_load_texture = gfx_load_texture,
     .audio_load_wav = audio_load_wav,
+    .storage_load_text = storage_load_text,
     .storage_save_state = storage_save_state,
     .storage_load_state = storage_load_state,
 

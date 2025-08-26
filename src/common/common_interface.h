@@ -7,6 +7,8 @@
 
 #include "common_structs.h"
 
+#define DEBUG_MESSAGE_MAX_LEN (256)
+
 typedef struct Platform Platform_t;
 typedef struct PlatformCapabilities PlatformCapabilities_t;
 typedef struct PlatformSettings PlatformSettings_t;
@@ -65,6 +67,7 @@ struct Platform
     // storage
     void (*gfx_load_texture)(char *name, Texture_t *dest);
     void (*audio_load_wav)(char *name, AudioClip_t *dest);
+    size_t (*storage_load_text)(const char *name, char *dest, size_t max_len);
     void (*storage_save_state)(char *state_name);
     void (*storage_load_state)(char *state_name);
     // utils

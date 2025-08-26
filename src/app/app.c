@@ -1,14 +1,18 @@
 #include <stdint.h>
-#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "common_interface.h"
 #include "common_structs.h"
 
-#define APP_SCRATCH_SIZE (1024*2048)
+#define APP_BUMP_SIZE (1024*2048)
+#define APP_SCRATCH_SIZE (4096)
+
 #define APP_THINGS_MAX_COUNT (256)
-#define APP_THINGS_LAYER_COUNT (6)
+#define APP_LAYER_COUNT (6)
+
+#define APP_TEXTURES_MAX_COUNT (64)
+#define APP_SFX_MAX_COUNT (64)
 
 typedef struct Thing
 {
@@ -24,12 +28,6 @@ typedef struct Thing
     uint8_t layer;
 } Thing_t;
 
-typedef struct AppScratch
-{
-    size_t used;
-    uint8_t buff[APP_SCRATCH_SIZE];
-} AppScratch_t;
-
 typedef struct AppSerializables
 {
     bool initialized;
@@ -41,10 +39,20 @@ typedef struct AppSerializables
 
 typedef struct AppEphemera
 {
-    char debug_buff[128];
-    int32_t things_draw_order_layer_offsets[APP_THINGS_LAYER_COUNT];
+    char debug_buff[DEBUG_MESSAGE_MAX_LEN];
+    uint8_t scratch[APP_SCRATCH_SIZE];
+
+    uint16_t sfx_count;
+    size_t sfx_indices[APP_SFX_MAX_COUNT];
+
+    uint16_t texture_count;
+    size_t texture_indices[APP_TEXTURES_MAX_COUNT];
+
+    int32_t things_draw_order_layer_offsets[APP_LAYER_COUNT];
     uint16_t things_draw_order[APP_THINGS_MAX_COUNT];
-    AppScratch_t scratch;
+
+    size_t bump_used;
+    uint8_t bump_buffer[APP_BUMP_SIZE];
 } AppEphemeral_t;
 
 static const Platform_t *platform = NULL;
@@ -55,8 +63,8 @@ static AppEphemeral_t *ephemerals = NULL;
 static char input_read_from_buffer(UniformRing_t *input_buffer);
 static void input_process_all(void);
 
-static size_t load_texture_to_scratch(char *name);
-static size_t load_wav_to_scratch(char *name);
+static size_t load_texture_to_memory(char *name);
+static size_t load_wav_to_memory(char *name);
 
 static void audio_push_samples(float *samples, uint32_t len, uint8_t channels);
 static void audio_push_clip(AudioClip_t *clip);
@@ -138,10 +146,10 @@ static void input_process_all(void)
 
 }
 
-static size_t load_texture_to_scratch(char *name)
+static size_t load_texture_to_memory(char *name)
 {
-    size_t index = ephemerals->scratch.used;
-    Texture_t *texture_ptr = (Texture_t *)(ephemerals->scratch.buff+index);
+    size_t index = ephemerals->bump_used;
+    Texture_t *texture_ptr = (Texture_t *)(ephemerals->bump_buffer+index);
 
     snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff),
             "Loading texture '%s' to scratch memory at offset %ld, address %p.",
@@ -150,14 +158,18 @@ static size_t load_texture_to_scratch(char *name)
 
     platform->gfx_load_texture(name, texture_ptr);
     size_t size = sizeof(Texture_t) + (texture_ptr->height * texture_ptr->width * texture_ptr->pixel_size_bytes);
-    ephemerals->scratch.used += size;
+    ephemerals->bump_used += size;
+
+    ephemerals->texture_indices[ephemerals->texture_count] = index;
+    ephemerals->texture_count++;
+
     return index;
 }
 
-static size_t load_wav_to_scratch(char *name)
+static size_t load_wav_to_memory(char *name)
 {
-    size_t index = ephemerals->scratch.used;
-    AudioClip_t *clip_ptr = (AudioClip_t *)(ephemerals->scratch.buff+index);
+    size_t index = ephemerals->bump_used;
+    AudioClip_t *clip_ptr = (AudioClip_t *)(ephemerals->bump_buffer+index);
 
     snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Loading wav '%s' to scratch memory at offset %lu.", name, index);
     platform->debug_log(ephemerals->debug_buff);
@@ -187,7 +199,10 @@ static size_t load_wav_to_scratch(char *name)
     */
 
     size_t size = sizeof(AudioClip_t) + (sizeof(float) * clip_ptr->num_samples);
-    ephemerals->scratch.used += size;
+    ephemerals->bump_used += size;
+    
+    ephemerals->sfx_indices[ephemerals->sfx_count] = index;
+    ephemerals->sfx_count++;
 
     return index;
 }
@@ -323,7 +338,7 @@ static void things_initialize_draw_order(void)
     }
 
     /// initialize layer offsets to -1, e.g. no things using that layer
-    for (uint8_t i = 0; i < APP_THINGS_LAYER_COUNT; i++)
+    for (uint8_t i = 0; i < APP_LAYER_COUNT; i++)
     {
         ephemerals->things_draw_order_layer_offsets[i] = -1;
     }
@@ -355,7 +370,7 @@ static void things_update_draw_order(void)
     int32_t start_idx = 0;
     int32_t end_idx = 0;
 
-    for (int8_t i = 0; i < APP_THINGS_LAYER_COUNT; i++)
+    for (int8_t i = 0; i < APP_LAYER_COUNT; i++)
     {
         start_idx = ephemerals->things_draw_order_layer_offsets[i];
 
@@ -363,7 +378,7 @@ static void things_update_draw_order(void)
 
         end_idx = -1;
 
-        for (int8_t j = i+1; j < APP_THINGS_LAYER_COUNT; j++)
+        for (int8_t j = i+1; j < APP_LAYER_COUNT; j++)
         {
             if (ephemerals->things_draw_order_layer_offsets[j] > start_idx)
             {
@@ -431,7 +446,7 @@ static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta)
         return;
     }
 
-    audio_push_clip((AudioClip_t *)(ephemerals->scratch.buff+serializables->things[thing_idx].move_sfx_idx));
+    audio_push_clip((AudioClip_t *)(ephemerals->bump_buffer+serializables->things[thing_idx].move_sfx_idx));
     /*
     snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Thing %d moved to [%d,%d]", thing_idx,
             serializables->things[thing_idx].x_pos, serializables->things[thing_idx].y_pos);
@@ -485,7 +500,7 @@ static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y)
 static void gfx_draw_thing(uint32_t thing_idx)
 {
     if (!serializables->things[thing_idx].used) return;
-    gfx_draw_texture((Texture_t *)(ephemerals->scratch.buff+serializables->things[thing_idx].texture_idx),
+    gfx_draw_texture((Texture_t *)(ephemerals->bump_buffer+serializables->things[thing_idx].texture_idx),
         serializables->things[thing_idx].x_pos - serializables->things[thing_idx].x_offset,
         serializables->things[thing_idx].y_pos - serializables->things[thing_idx].y_offset);
 }
@@ -544,7 +559,7 @@ void app_setup(Platform_t *interface)
     platform->settings->gfx_buffer_height;
 
     platform->settings->audio_channels = 2;
-    platform->settings->audio_buffer_capacity = 48000;
+    platform->settings->audio_buffer_capacity = 32768;
 
     platform->settings->input_buffer_capacity = 128;
 
@@ -596,7 +611,7 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
     /// EPHEMERALS
     platform->debug_log("Initializing app ephemeral state.");
 
-    ephemerals->scratch.used = 0;
+    ephemerals->bump_used = 0;
 
     /// SERIALIZABLES
 
@@ -611,13 +626,13 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
         serializables->things_count = 0;
         explicit_bzero(serializables->things, sizeof(Thing_t) * APP_THINGS_MAX_COUNT);
 
-        size_t thing1_texture_idx = load_texture_to_scratch("thing1.bmp");
-        size_t thing2_texture_idx = load_texture_to_scratch("thing2.bmp");
-        size_t pillar_texture_idx = load_texture_to_scratch("pillar_iso_hstretch.bmp");
-        size_t back_wall_texture_idx = load_texture_to_scratch("wall_back_hstretch.bmp");
-        size_t floor_texture_idx = load_texture_to_scratch("floor_hstretch.bmp");
-        size_t sfx01_idx = load_wav_to_scratch("sfx01.wav");
-        size_t sfx02_idx = load_wav_to_scratch("sfx02.wav");
+        size_t thing1_texture_idx = load_texture_to_memory("textures/thing1.bmp");
+        size_t thing2_texture_idx = load_texture_to_memory("textures/thing2.bmp");
+        size_t pillar_texture_idx = load_texture_to_memory("textures/pillar_iso_hstretch.bmp");
+        size_t back_wall_texture_idx = load_texture_to_memory("textures/wall_back_hstretch.bmp");
+        size_t floor_texture_idx = load_texture_to_memory("textures/floor_hstretch.bmp");
+        size_t sfx01_idx = load_wav_to_memory("sfx/sfx01.wav");
+        size_t sfx02_idx = load_wav_to_memory("sfx/sfx02.wav");
 
         uint16_t thing_idx;
 
@@ -625,17 +640,25 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
         {
             thing_idx = thing_create(5);
 
-            thing_set_texture(thing_idx, i == 0 ? thing1_texture_idx : thing2_texture_idx, 4, 6, 6, 2);
+            thing_set_texture(thing_idx, i == 0 ? ephemerals->texture_indices[0] : ephemerals->texture_indices[1], 4, 6, 6, 2);
             thing_set_pos(thing_idx, 24*(i+1), 8);
 
-            thing_set_move_sfx(thing_idx, i == 0 ? sfx01_idx : sfx02_idx);
+            thing_set_move_sfx(thing_idx, i == 0 ? ephemerals->sfx_indices[0] : ephemerals->sfx_indices[1]);
+        }
+
+        for (int i = 0; i < 7; i++)
+        {
+            thing_idx = thing_create(5);
+
+            thing_set_texture(thing_idx, ephemerals->texture_indices[2], 6, 3, 12, 2);
+            thing_set_pos(thing_idx, 5 + (i*16), 5);
         }
 
         for (int i = 0; i < 24; i++)
         {
             thing_idx = thing_create(0);
 
-            thing_set_texture(thing_idx, back_wall_texture_idx, 0, 0, 0, 0);
+            thing_set_texture(thing_idx, ephemerals->texture_indices[3], 0, 0, 0, 0);
             thing_set_pos(thing_idx, 0 + (i*4), 0);
         }
 
@@ -645,17 +668,9 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
             {
                 thing_idx = thing_create(0);
 
-                thing_set_texture(thing_idx, floor_texture_idx, 0, 0, 0, 0);
+                thing_set_texture(thing_idx, ephemerals->texture_indices[4], 0, 0, 0, 0);
                 thing_set_pos(thing_idx, 0 + (i*4), 5 + (4 * y));
             }
-        }
-
-        for (int i = 0; i < 7; i++)
-        {
-            thing_idx = thing_create(5);
-
-            thing_set_texture(thing_idx, pillar_texture_idx, 6, 3, 12, 2);
-            thing_set_pos(thing_idx, 5 + (i*16), 5);
         }
 
         serializables->controlled_thing_idx = 0;

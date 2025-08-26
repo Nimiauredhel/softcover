@@ -1,6 +1,7 @@
 #include "terminal_utils.h"
 #include "terminal_ncurses.h"
 
+#include <errno.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
@@ -76,6 +77,50 @@ int random_range(int min, int max)
     int random_number = rand();
     random_number = (random_number % (max - min + 1)) + min;
     return random_number;
+}
+
+size_t storage_load_text(const char *name, char *dest, size_t max_len)
+{
+    char debug_buff[DEBUG_MESSAGE_MAX_LEN] = {0};
+
+    if (max_len <= 0) return 0;
+
+    size_t remaining = max_len;
+    size_t read = 0;
+
+    FILE *file = fopen(name, "r");
+
+    if (file == NULL)
+    {
+        int err = errno;
+        snprintf(debug_buff, sizeof(debug_buff), "Failed to open [%s]: %s.", name, strerror(err));
+        debug_log(debug_buff);
+        return 0;
+    }
+
+    char *line = NULL;
+    size_t line_len = 0;
+
+    do
+    {
+        line = fgets(dest, remaining, file);
+
+        if (line != NULL)
+        {
+            line_len = strlen(line);
+            remaining -= line_len;
+            read += line_len;
+        }
+        else
+        {
+            break;
+        } 
+    }
+    while (remaining > 0);
+
+    fclose(file);
+
+    return read;
 }
 
 void gfx_load_texture(char *name, Texture_t *dest)

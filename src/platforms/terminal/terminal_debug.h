@@ -3,8 +3,9 @@
 
 #include <stdint.h>
 
+#include "common_interface.h"
+
 #define DEBUG_RING_CAPACITY (256)
-#define DEBUG_MESSAGE_MAX_LEN (256)
 
 typedef struct DebugRing
 {
