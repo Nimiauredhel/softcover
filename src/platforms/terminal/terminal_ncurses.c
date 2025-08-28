@@ -71,11 +71,11 @@ void gfx_refresh_debug_window(DebugRing_t *debug_ring, bool is_break)
     mvwprintw(debug_window, 0, 0, "%s", is_break ? "BREAK" : "DEBUG");
     wattroff(debug_window, COLOR_PAIR(COLOR_PAIR_BG_RED));
 
-    int32_t mod = debug_ring->len - debug_window_height;
+    int32_t mod = debug_ring->len - (debug_window_height-1);
     if (mod < 0) mod = 0;
     uint16_t idx = (debug_ring->head + mod) % DEBUG_RING_CAPACITY;;
 
-    for (uint16_t i = 1; i < debug_ring->len; i++)
+    for (uint16_t i = 1; i < debug_window_height; i++)
     {
         wattron(debug_window, COLOR_PAIR(COLOR_PAIR_BG_BLACK));
         mvwprintw(debug_window, i, 0, "[%u]%s", idx, debug_ring->debug_messages[idx]);

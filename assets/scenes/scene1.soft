@@ -1,0 +1,101 @@
+### character 1 ###
+# prefab index
+0
+# repetition count
+1
+# layer index
+5
+# x / y per repetition
+24 8
+### character 2 ###
+# prefab index
+1
+# repetition count
+1
+# layer index
+5
+# x / y per repetition
+48 8
+### pillars ###
+# prefab index
+2
+# repetition count
+7
+# layer index
+5
+# x / y per repetition
+5 5
+23 5
+39 5
+55 5
+71 5
+88 5
+104 5
+### back wall tiles ###
+# prefab index
+3
+# repetition count
+16
+# layer index
+0
+# x / y per repetition
+0 0
+8 0
+16 0
+24 0
+32 0
+40 0
+48 0
+56 0
+64 0
+72 0
+80 0
+88 0
+96 0
+104 0
+112 0
+120 0
+### floor tiles ###
+# prefab index
+4
+# repetition count
+36
+# layer index
+0
+# x / y per repetition
+0   5
+8   5
+16  5
+24  5
+32  5
+40  5
+48  5
+56  5
+64  5
+72  5
+80  5
+88  5
+0   13
+8   13
+16  13
+24  13
+32  13
+40  13
+48  13
+56  13
+64  13
+72  13
+80  13
+88  13
+0   21
+8   21
+16  21
+24  21
+32  21
+40  21
+48  21
+56  21
+64  21
+72  21
+80  21
+88  21

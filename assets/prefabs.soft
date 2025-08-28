@@ -1,0 +1,50 @@
+### character 1 ###
+# texture idx
+0
+# move sfx idx
+0
+# offsets
+4 6
+# coll
+6 2
+####
+### character 2 ###
+# texture idx
+1
+# move sfx idx
+1
+# offsets
+4 6
+# coll
+6 2
+####
+### pillar ###
+# texture idx
+2
+# move sfx idx
+0
+# offsets
+6 3
+# coll
+12 2
+####
+### back wall tile ###
+# texture idx
+3
+# move sfx idx
+0
+# offsets
+0 0
+# coll
+0 0
+####
+### floor tile ###
+# texture idx
+4
+# move sfx idx
+0
+# offsets
+0 0
+# coll
+0 0
+####

@@ -8,23 +8,30 @@
 #define APP_BUMP_SIZE (1024*2048)
 #define APP_SCRATCH_SIZE (4096)
 
-#define APP_THINGS_MAX_COUNT (256)
-#define APP_LAYER_COUNT (6)
-
 #define APP_TEXTURES_MAX_COUNT (64)
-#define APP_SFX_MAX_COUNT (64)
+#define APP_SOUNDS_MAX_COUNT (64)
 
-typedef struct Thing
+#define APP_LAYER_COUNT (6)
+#define APP_PREFABS_MAX_COUNT (32)
+
+#define SCENE_THINGS_MAX_COUNT (512)
+
+typedef struct Prefab
 {
-    bool used;
     size_t texture_idx;
     size_t move_sfx_idx;
-    int16_t x_pos;
-    int16_t y_pos;
     int16_t x_offset;
     int16_t y_offset;
     uint16_t coll_width;
     uint16_t coll_height;
+} Prefab_t;
+
+typedef struct Thing
+{
+    bool used;
+    uint16_t prefab_idx;
+    int16_t x_pos;
+    int16_t y_pos;
     uint8_t layer;
 } Thing_t;
 
@@ -34,7 +41,7 @@ typedef struct AppSerializables
     uint16_t mov_speed;
     uint16_t things_count;
     uint16_t controlled_thing_idx;
-    Thing_t things[APP_THINGS_MAX_COUNT];
+    Thing_t things[SCENE_THINGS_MAX_COUNT];
 } AppSerializable_t;
 
 typedef struct AppEphemera
@@ -42,14 +49,17 @@ typedef struct AppEphemera
     char debug_buff[DEBUG_MESSAGE_MAX_LEN];
     uint8_t scratch[APP_SCRATCH_SIZE];
 
+    uint16_t prefabs_count;
+    size_t prefab_offsets[APP_PREFABS_MAX_COUNT];
+
     uint16_t sounds_count;
-    size_t sound_indices[APP_SFX_MAX_COUNT];
+    size_t sound_offsets[APP_SOUNDS_MAX_COUNT];
 
     uint16_t textures_count;
-    size_t texture_indices[APP_TEXTURES_MAX_COUNT];
+    size_t texture_offsets[APP_TEXTURES_MAX_COUNT];
 
     int32_t things_draw_order_layer_offsets[APP_LAYER_COUNT];
-    uint16_t things_draw_order[APP_THINGS_MAX_COUNT];
+    uint16_t things_draw_order[SCENE_THINGS_MAX_COUNT];
 
     size_t bump_used;
     uint8_t bump_buffer[APP_BUMP_SIZE];
@@ -66,6 +76,8 @@ static void input_process_all(void);
 static size_t load_texture_to_memory(char *name);
 static size_t load_wav_to_memory(char *name);
 
+static void load_prefabs_all(void);
+
 static void audio_push_samples(float *samples, uint32_t len, uint8_t channels);
 static void audio_push_clip(AudioClip_t *clip);
 
@@ -74,10 +86,12 @@ static void things_update_draw_order(void);
 static void things_get_distance(uint16_t first_thing_id, uint16_t second_thing_id, int32_t *x_dist_out, int32_t *y_dist_out);
 static uint16_t thing_test_collision(uint16_t thing_id);
 static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta);
-static int32_t thing_create(uint8_t layer);
+static int32_t thing_create(uint8_t prefab, uint8_t layer, uint16_t x, uint16_t y);
 static void thing_set_pos(uint32_t thing_id, int16_t x, int16_t y);
+/*
 static void thing_set_texture(uint32_t thing_id, uint32_t texture_id, int16_t x_offset, int16_t y_offset, int16_t coll_width, int16_t coll_height);
 static void thing_set_move_sfx(uint32_t thing_id, uint32_t sfx_id);
+*/
 static int8_t things_compare_y(Thing_t *first, Thing_t *second);
 static int8_t things_compare_layer(Thing_t *first, Thing_t *second);
 static void things_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t (*comparer)(Thing_t*, Thing_t*));
@@ -160,7 +174,7 @@ static size_t load_texture_to_memory(char *name)
     size_t size = sizeof(Texture_t) + (texture_ptr->height * texture_ptr->width * texture_ptr->pixel_size_bytes);
     ephemerals->bump_used += size;
 
-    ephemerals->texture_indices[ephemerals->textures_count] = index;
+    ephemerals->texture_offsets[ephemerals->textures_count] = index;
     ephemerals->textures_count++;
 
     return index;
@@ -201,10 +215,216 @@ static size_t load_wav_to_memory(char *name)
     size_t size = sizeof(AudioClip_t) + (sizeof(float) * clip_ptr->num_samples);
     ephemerals->bump_used += size;
     
-    ephemerals->sound_indices[ephemerals->sounds_count] = index;
+    ephemerals->sound_offsets[ephemerals->sounds_count] = index;
     ephemerals->sounds_count++;
 
     return index;
+}
+
+static void load_prefabs_all(void)
+{
+    bzero(ephemerals->scratch, APP_SCRATCH_SIZE);
+    size_t txt_len = platform->storage_load_text("prefabs.soft", (char *)ephemerals->scratch, APP_SCRATCH_SIZE);
+
+    if (txt_len > 0)
+    {
+        char *current_line = (char *)ephemerals->scratch;
+        char *next_line = NULL;
+
+        uint16_t current_idx = 0;
+        Prefab_t *current_ptr = NULL;
+        uint8_t state = 0; // 0 texture, 1 sfx, 2 offsets, 3 coll
+        char *token = NULL;
+
+        while (current_line != NULL && ephemerals->textures_count < APP_SOUNDS_MAX_COUNT)
+        {
+            next_line = strchr(current_line, '\n');
+            if (next_line) *next_line = '\0';
+            
+            if (strlen(current_line) > 0
+                && current_line[0] != '#')
+            {
+                switch (state)
+                {
+                    case 0:
+                        /// base prefab idx on prefab count
+                        current_idx = ephemerals->prefabs_count;
+                        /// increment prefab count
+                        ephemerals->prefabs_count++;
+
+                        /// base prefab offset on top of memory bump
+                        ephemerals->prefab_offsets[current_idx]
+                            = ephemerals->bump_used;
+                        /// raise top of memory bump by size of prefab struct
+                        ephemerals->bump_used += sizeof(Prefab_t);
+
+                        /// set prefab pointer to the just established location
+                        current_ptr = (Prefab_t *)(ephemerals->bump_buffer
+                            + ephemerals->prefab_offsets[current_idx]);
+
+                        /// set prefab texture idx accoring to line
+                        current_ptr->texture_idx = atoi(current_line);
+
+                        /// set state to read sfx next
+                        state = 1;
+                        break;
+                    case 1:
+                        /// set prefab move sfx idx accoring to line
+                        current_ptr->move_sfx_idx = atoi(current_line);
+                        /// set state to read offsets next
+                        state = 2;
+                        break;
+                    case 2:
+                        /// split line between x y according to delimiter
+                        token = strtok(current_line, " ");
+                        current_ptr->x_offset = atoi(token);
+                        token = strtok(NULL, " ");
+                        current_ptr->y_offset = atoi(token);
+                        /// set state to read coll bounds next
+                        state = 3;
+                        break;
+                    case 3:
+                        /// split line between width height according to delimiter
+                        token = strtok(current_line, " ");
+                        current_ptr->coll_width = atoi(token);
+                        token = strtok(NULL, " ");
+                        current_ptr->coll_height = atoi(token);
+                        /// set state to read next prefab texture idx next
+                        state = 0;
+                        current_ptr = NULL;
+                        token = NULL;
+                        break;
+                }
+            }
+
+            current_line = next_line ? next_line + 1 : NULL;
+        }
+    }
+}
+
+static void load_scene_by_path(char *path)
+{
+    bzero(ephemerals->scratch, APP_SCRATCH_SIZE);
+    size_t txt_len = platform->storage_load_text(path, (char *)ephemerals->scratch, APP_SCRATCH_SIZE);
+
+    if (txt_len > 0)
+    {
+        char *current_line = (char *)ephemerals->scratch;
+        char *next_line = NULL;
+
+        uint8_t state = 0; // 0 prefab, 1 repetition, 2 layer, 3 x y per rep
+        char *token = NULL;
+
+        uint16_t prefab_index = 0;
+        uint16_t rep_target = 0;
+        uint16_t rep_counter = 0;
+        uint16_t layer_index = 0;
+        uint16_t x_pos = 0;
+        uint16_t y_pos = 0;
+
+        while (current_line != NULL && ephemerals->textures_count < APP_SOUNDS_MAX_COUNT)
+        {
+            next_line = strchr(current_line, '\n');
+            if (next_line) *next_line = '\0';
+            
+            if (strlen(current_line) > 0
+                && current_line[0] != '#')
+            {
+                switch (state)
+                {
+                    case 0:
+                        /// set prefab idx according to line
+                        prefab_index = atoi(current_line);
+                        /// set state to read reps next
+                        state = 1;
+                        break;
+                    case 1:
+                        /// set rep target accoring to line
+                        rep_target = atoi(current_line);
+                        rep_counter = 0;
+                        /// set state to read layer next
+                        state = rep_target > 0 ? 2 : 0;
+                        break;
+                    case 2:
+                        /// set layer according to line
+                        layer_index = atoi(current_line);
+                        /// set state to read next prefab texture idx next
+                        state = 3;
+                        break;
+                    case 3:
+                        /// split line between x y according to delimiter
+                        token = strtok(current_line, " ");
+                        x_pos = atoi(token);
+                        token = strtok(NULL, " ");
+                        y_pos = atoi(token);
+                        thing_create(prefab_index, layer_index, x_pos, y_pos);
+
+                        rep_counter++;
+
+                        if (rep_counter >= rep_target)
+                        {
+                            /// set state to read next group of things
+                            state = 0;
+                            token = NULL;
+                        }
+                        break;
+                }
+            }
+
+            current_line = next_line ? next_line + 1 : NULL;
+        }
+
+        snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff),
+                "Loaded scene [%s], thing count: %u", path, serializables->things_count);
+        platform->debug_log(ephemerals->debug_buff);
+    }
+    else
+    {
+        snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff),
+                "Could not load scene [%s].", path);
+        platform->debug_log(ephemerals->debug_buff);
+    }
+}
+
+static void load_scene_by_index(uint8_t index)
+{
+    char path[256] = {0};
+    bool found = false;
+
+    bzero(ephemerals->scratch, APP_SCRATCH_SIZE);
+    size_t txt_len = platform->storage_load_text("scenes.soft", (char *)ephemerals->scratch, APP_SCRATCH_SIZE);
+
+    if (txt_len > 0)
+    {
+        char *current_line = (char *)ephemerals->scratch;
+        char *next_line = NULL;
+        uint8_t current_scene_index = 0;
+
+        while (current_line != NULL && ephemerals->textures_count < APP_SOUNDS_MAX_COUNT)
+        {
+            next_line = strchr(current_line, '\n');
+            if (next_line) *next_line = '\0';
+            
+            if (strlen(current_line) > 0
+                && current_line[0] != '#')
+            {
+                if (current_scene_index == index)
+                {
+                    strncpy(path, current_line, sizeof(path));
+                    found = true;
+                    break;
+                }
+                current_scene_index++;
+            }
+
+            current_line = next_line ? next_line + 1 : NULL;
+        }
+
+        if (found)
+        {
+            load_scene_by_path(path);
+        }
+    }
 }
 
 static void audio_push_samples(float *samples, uint32_t len, uint8_t channels)
@@ -232,9 +452,9 @@ static void audio_push_clip(AudioClip_t *clip)
     audio_push_samples(clip->samples, clip->num_samples, clip->num_channels);
 }
 
-static int32_t thing_create(uint8_t layer)
+static int32_t thing_create(uint8_t prefab, uint8_t layer, uint16_t x, uint16_t y)
 {
-    if (serializables->things_count >= APP_THINGS_MAX_COUNT)
+    if (serializables->things_count >= SCENE_THINGS_MAX_COUNT)
     {
         platform->debug_log("Cannot create new Thing, reached maximum.");
         return -1;
@@ -242,12 +462,15 @@ static int32_t thing_create(uint8_t layer)
 
     uint16_t index = serializables->things_count;
 
+    serializables->things[index].prefab_idx = prefab;
     serializables->things[index].layer = layer;
+    serializables->things[index].x_pos = x;
+    serializables->things[index].y_pos = y;
     serializables->things[index].used = true;
 
     serializables->things_count++;
 
-    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Created new Thing at index %u, layer %u.", index, layer);
+    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Created new %u-Thing at index %u, [%u,%u] layer %u.", prefab, index, x, y, layer);
     platform->debug_log(ephemerals->debug_buff);
 
     return index;
@@ -264,6 +487,7 @@ static void thing_set_pos(uint32_t thing_id, int16_t x, int16_t y)
     */
 }
 
+/*
 static void thing_set_texture(uint32_t thing_id, uint32_t texture_id, int16_t x_offset, int16_t y_offset, int16_t coll_width, int16_t coll_height)
 {
     serializables->things[thing_id].texture_idx = texture_id;
@@ -272,24 +496,22 @@ static void thing_set_texture(uint32_t thing_id, uint32_t texture_id, int16_t x_
     serializables->things[thing_id].coll_width = coll_width;
     serializables->things[thing_id].coll_height = coll_height;
 
-    /*
-    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Set Thing %u texture ID %u, offs [%d,%d], dims [%u,%u].", thing_id, texture_id, x_offset, y_offset, coll_width, coll_height);
-    platform->debug_log(ephemerals->debug_buff);
-    */
 }
 
 static void thing_set_move_sfx(uint32_t thing_id, uint32_t sfx_id)
 {
     serializables->things[thing_id].move_sfx_idx = sfx_id;
-    /*
-    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Set Thing %u move sfx ID %u.", thing_id, sfx_id);
-    platform->debug_log(ephemerals->debug_buff);
-    */
+}
+*/
+
+static Prefab_t* thing_get_prefab(Thing_t *thing)
+{
+    return ((Prefab_t *)(ephemerals->bump_buffer+ephemerals->prefab_offsets[thing->prefab_idx]));
 }
 
 static int8_t things_compare_y(Thing_t *first, Thing_t *second)
 {
-    return (first->y_pos + first->y_offset) - (second->y_pos + second->y_offset);
+    return (first->y_pos + thing_get_prefab(first)->y_offset) - (second->y_pos + thing_get_prefab(second)->y_offset);
 }
 
 static int8_t things_compare_layer(Thing_t *first, Thing_t *second)
@@ -302,7 +524,7 @@ static void things_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t
     uint16_t temp;
     bool swapped = false;
 
-    for (; end_idx >= start_idx; end_idx--)
+    for (; end_idx > start_idx; end_idx--)
     {
         if (!serializables->things[ephemerals->things_draw_order[end_idx]].used)
         {
@@ -331,6 +553,12 @@ static void things_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t
 
 static void things_initialize_draw_order(void)
 {
+    if (serializables->things_count <= 0)
+    {
+        platform->debug_log("Cannot initialize draw order - thing count is zero!");
+        return;
+    }
+
     /// initialize unsorted state
     for (uint16_t i = 0; i < serializables->things_count; i++)
     {
@@ -367,6 +595,12 @@ static void things_initialize_draw_order(void)
 
 static void things_update_draw_order(void)
 {
+    if (serializables->things_count <= 0)
+    {
+        platform->debug_log("Cannot update draw order - thing count is zero!");
+        return;
+    }
+
     int32_t start_idx = 0;
     int32_t end_idx = 0;
 
@@ -410,18 +644,22 @@ static uint16_t thing_test_collision(uint16_t thing_id)
 {
     int32_t dist_x;
     int32_t dist_y;
+    uint16_t width = thing_get_prefab(&serializables->things[thing_id])->coll_width;
+    uint16_t height = thing_get_prefab(&serializables->things[thing_id])->coll_height;
 
-    if (serializables->things[thing_id].coll_width == 0 || serializables->things[thing_id].coll_height == 0) return thing_id;
+    if (width == 0 || height == 0) return thing_id;
 
     for (uint16_t i = 0; i < serializables->things_count; i++)
     {
         if (i == thing_id) continue;
-        if (serializables->things[i].coll_width == 0 || serializables->things[i].coll_height == 0) continue;
+        uint16_t other_width = thing_get_prefab(&serializables->things[i])->coll_width;
+        uint16_t other_height = thing_get_prefab(&serializables->things[i])->coll_height;
+        if (other_width == 0 || other_height == 0) continue;
 
         things_get_distance(thing_id, i, &dist_x, &dist_y);
 
-        if ((dist_x < (serializables->things[thing_id].coll_width + serializables->things[i].coll_width) / 2)
-         && (dist_y < (serializables->things[thing_id].coll_height + serializables->things[i].coll_height) / 2))
+        if ((dist_x < (width + other_width) / 2)
+         && (dist_y < (height + other_height) / 2))
         {
             snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Thing %d collided with Thing %d.", thing_id, i);
             platform->debug_log(ephemerals->debug_buff);
@@ -446,7 +684,8 @@ static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta)
         return;
     }
 
-    audio_push_clip((AudioClip_t *)(ephemerals->bump_buffer+serializables->things[thing_idx].move_sfx_idx));
+    size_t sfx_offset = ephemerals->sound_offsets[thing_get_prefab(&serializables->things[thing_idx])->move_sfx_idx];
+    audio_push_clip((AudioClip_t *)(ephemerals->bump_buffer+sfx_offset));
     /*
     snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Thing %d moved to [%d,%d]", thing_idx,
             serializables->things[thing_idx].x_pos, serializables->things[thing_idx].y_pos);
@@ -500,9 +739,10 @@ static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y)
 static void gfx_draw_thing(uint32_t thing_idx)
 {
     if (!serializables->things[thing_idx].used) return;
-    gfx_draw_texture((Texture_t *)(ephemerals->bump_buffer+serializables->things[thing_idx].texture_idx),
-        serializables->things[thing_idx].x_pos - serializables->things[thing_idx].x_offset,
-        serializables->things[thing_idx].y_pos - serializables->things[thing_idx].y_offset);
+    size_t texture_offset = ephemerals->texture_offsets[thing_get_prefab(&serializables->things[thing_idx])->texture_idx];
+    gfx_draw_texture((Texture_t *)(ephemerals->bump_buffer+texture_offset),
+        serializables->things[thing_idx].x_pos - thing_get_prefab(&serializables->things[thing_idx])->x_offset,
+        serializables->things[thing_idx].y_pos - thing_get_prefab(&serializables->things[thing_idx])->y_offset);
 }
 
 static void gfx_draw_all_things_debug(void)
@@ -610,8 +850,60 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
 
     /// EPHEMERALS
     platform->debug_log("Initializing app ephemeral state.");
-
     ephemerals->bump_used = 0;
+
+    /// load all textures according to file
+    size_t txt_len = 0;
+
+    bzero(ephemerals->scratch, APP_SCRATCH_SIZE);
+    txt_len = platform->storage_load_text("textures.soft", (char *)ephemerals->scratch, APP_SCRATCH_SIZE);
+
+    if (txt_len > 0)
+    {
+        char *current_line = (char *)ephemerals->scratch;
+        char *next_line = NULL;
+
+        while (current_line != NULL && ephemerals->textures_count < APP_TEXTURES_MAX_COUNT)
+        {
+            next_line = strchr(current_line, '\n');
+            if (next_line) *next_line = '\0';
+            
+            if (strlen(current_line) > 5)
+            {
+                load_texture_to_memory(current_line);
+            }
+
+            //if (next_line) *next_line = '\n';
+            current_line = next_line ? next_line + 1 : NULL;
+        }
+    }
+
+    /// load all sounds according to file
+    bzero(ephemerals->scratch, APP_SCRATCH_SIZE);
+    txt_len = platform->storage_load_text("sounds.soft", (char *)ephemerals->scratch, APP_SCRATCH_SIZE);
+
+    if (txt_len > 0)
+    {
+        char *current_line = (char *)ephemerals->scratch;
+        char *next_line = NULL;
+
+        while (current_line != NULL && ephemerals->textures_count < APP_SOUNDS_MAX_COUNT)
+        {
+            next_line = strchr(current_line, '\n');
+            if (next_line) *next_line = '\0';
+            
+            if (strlen(current_line) > 5)
+            {
+                load_wav_to_memory(current_line);
+            }
+
+            //if (next_line) *next_line = '\n';
+            current_line = next_line ? next_line + 1 : NULL;
+        }
+    }
+
+    /// load all prefabs according to file
+    load_prefabs_all();
 
     /// SERIALIZABLES
 
@@ -624,56 +916,7 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
         platform->debug_log("Initializing app serializable state.");
 
         serializables->things_count = 0;
-        explicit_bzero(serializables->things, sizeof(Thing_t) * APP_THINGS_MAX_COUNT);
-
-        /// load all textures according to file
-        size_t txt_len = 0;
-
-        bzero(ephemerals->scratch, APP_SCRATCH_SIZE);
-        txt_len = platform->storage_load_text("textures.soft", (char *)ephemerals->scratch, APP_SCRATCH_SIZE);
-
-        if (txt_len > 0)
-        {
-            char *current_line = (char *)ephemerals->scratch;
-            char *next_line = NULL;
-
-            while (current_line != NULL && ephemerals->textures_count < APP_TEXTURES_MAX_COUNT)
-            {
-                next_line = strchr(current_line, '\n');
-                if (next_line) *next_line = '\0';
-                
-                if (strlen(current_line) > 5)
-                {
-                    load_texture_to_memory(current_line);
-                }
-
-                //if (next_line) *next_line = '\n';
-                current_line = next_line ? next_line + 1 : NULL;
-            }
-        }
-
-        bzero(ephemerals->scratch, APP_SCRATCH_SIZE);
-        txt_len = platform->storage_load_text("sounds.soft", (char *)ephemerals->scratch, APP_SCRATCH_SIZE);
-
-        if (txt_len > 0)
-        {
-            char *current_line = (char *)ephemerals->scratch;
-            char *next_line = NULL;
-
-            while (current_line != NULL && ephemerals->textures_count < APP_SFX_MAX_COUNT)
-            {
-                next_line = strchr(current_line, '\n');
-                if (next_line) *next_line = '\0';
-                
-                if (strlen(current_line) > 5)
-                {
-                    load_wav_to_memory(current_line);
-                }
-
-                //if (next_line) *next_line = '\n';
-                current_line = next_line ? next_line + 1 : NULL;
-            }
-        }
+        explicit_bzero(serializables->things, sizeof(Thing_t) * SCENE_THINGS_MAX_COUNT);
 
         /*
         size_t thing1_texture_idx = load_texture_to_memory("textures/thing1.bmp");
@@ -685,44 +928,47 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
         size_t sfx02_idx = load_wav_to_memory("sfx/sfx02.wav");
         */
 
+        /*
         uint16_t thing_idx;
 
         for (int i = 0; i < 2; i++)
         {
             thing_idx = thing_create(5);
 
-            thing_set_texture(thing_idx, i == 0 ? ephemerals->texture_indices[0] : ephemerals->texture_indices[1], 4, 6, 6, 2);
+            thing_set_texture(thing_idx, i == 0 ? ephemerals->texture_offsets[0] : ephemerals->texture_offsets[1], 4, 6, 6, 2);
             thing_set_pos(thing_idx, 24*(i+1), 8);
 
-            thing_set_move_sfx(thing_idx, i == 0 ? ephemerals->sound_indices[0] : ephemerals->sound_indices[1]);
+            thing_set_move_sfx(thing_idx, i == 0 ? ephemerals->sound_offsets[0] : ephemerals->sound_offsets[1]);
         }
 
         for (int i = 0; i < 7; i++)
         {
             thing_idx = thing_create(5);
 
-            thing_set_texture(thing_idx, ephemerals->texture_indices[2], 6, 3, 12, 2);
+            thing_set_texture(thing_idx, ephemerals->texture_offsets[2], 6, 3, 12, 2);
             thing_set_pos(thing_idx, 5 + (i*16), 5);
         }
 
-        for (int i = 0; i < 24; i++)
+        for (int i = 0; i < 16; i++)
         {
             thing_idx = thing_create(0);
 
-            thing_set_texture(thing_idx, ephemerals->texture_indices[3], 0, 0, 0, 0);
-            thing_set_pos(thing_idx, 0 + (i*4), 0);
+            thing_set_texture(thing_idx, ephemerals->texture_offsets[3], 0, 0, 0, 0);
+            thing_set_pos(thing_idx, 0 + (i*8), 0);
         }
 
-        for (int y = 0; y < 6; y++)
+        for (int y = 0; y < 3; y++)
         {
-            for (int i = 0; i < 24; i++)
+            for (int i = 0; i < 12; i++)
             {
                 thing_idx = thing_create(0);
 
-                thing_set_texture(thing_idx, ephemerals->texture_indices[4], 0, 0, 0, 0);
-                thing_set_pos(thing_idx, 0 + (i*4), 5 + (4 * y));
+                thing_set_texture(thing_idx, ephemerals->texture_offsets[4], 0, 0, 0, 0);
+                thing_set_pos(thing_idx, 0 + (i*8), 5 + (8 * y));
             }
         }
+        */
+        load_scene_by_index(0);
 
         serializables->controlled_thing_idx = 0;
         serializables->mov_speed = 1;
