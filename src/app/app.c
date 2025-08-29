@@ -24,6 +24,7 @@ typedef struct AppSerializables
     bool initialized;
     uint16_t mov_speed;
     uint16_t controlled_thing_idx;
+    uint16_t focal_thing_idx;
     uint8_t scene_count;
     uint8_t scene_index;
     Scene_t scenes[APP_MAX_SCENES];
@@ -811,6 +812,16 @@ static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta)
     */
 }
 
+static void gfx_world_to_screen_coords(int16_t *x_ptr, int16_t *y_ptr)
+{
+    Scene_t *scene = &serializables->scenes[serializables->scene_index];
+
+    *x_ptr += app->gfx_buffer->width/2;
+    *x_ptr -= scene->things[serializables->focal_thing_idx].transform.x_pos;
+    *y_ptr += app->gfx_buffer->height/2;
+    *y_ptr -= scene->things[serializables->focal_thing_idx].transform.y_pos;
+}
+
 static void gfx_clear_buffer(void)
 {
     if (app == NULL || app->gfx_buffer == NULL) return;
@@ -871,13 +882,16 @@ static void gfx_debug_draw_collider(uint32_t thing_idx, uint32_t draw_val)
     int16_t max_x = collider->max_x + transform->x_pos;
     int16_t max_y = collider->max_y + transform->y_pos;
 
+    gfx_world_to_screen_coords(&min_x, &min_y);
+    gfx_world_to_screen_coords(&max_x, &max_y);
+
     for (int16_t y = min_y; y <= max_y; y++)
     {
         if (y == min_y || y == max_y)
         {
             for (int16_t x = min_x; x <= max_x; x++)
             {
-                if (x < 0 || x >= app->gfx_buffer->width || y < 0 || y >= app->gfx_buffer->width) continue;
+                if (x < 0 || x >= app->gfx_buffer->width || y < 0 || y >= app->gfx_buffer->height) continue;
                 uint16_t buffer_idx = app->gfx_buffer->pixel_size_bytes * (x + (y * app->gfx_buffer->width));
 
                 for (int i = 0; i < app->gfx_buffer->pixel_size_bytes; i++)
@@ -888,7 +902,7 @@ static void gfx_debug_draw_collider(uint32_t thing_idx, uint32_t draw_val)
         }
         else
         {
-            if (min_x >= 0 && min_x < app->gfx_buffer->width && y >= 0 && y < app->gfx_buffer->width)
+            if (min_x >= 0 && min_x < app->gfx_buffer->width && y >= 0 && y < app->gfx_buffer->height)
             {
                 uint16_t buffer_idx = app->gfx_buffer->pixel_size_bytes * (min_x + (y * app->gfx_buffer->width));
 
@@ -898,7 +912,7 @@ static void gfx_debug_draw_collider(uint32_t thing_idx, uint32_t draw_val)
                 }
             }
 
-            if (max_x >= 0 && max_x < app->gfx_buffer->width && y >= 0 && y < app->gfx_buffer->width)
+            if (max_x >= 0 && max_x < app->gfx_buffer->width && y >= 0 && y < app->gfx_buffer->height)
             {
                 uint16_t buffer_idx = app->gfx_buffer->pixel_size_bytes * (max_x + (y * app->gfx_buffer->width));
 
@@ -916,10 +930,16 @@ static void gfx_draw_thing(uint32_t thing_idx)
     Scene_t *scene = &serializables->scenes[serializables->scene_index];
 
     if (!scene->things[thing_idx].used) return;
+
     size_t texture_offset = ephemerals->texture_offsets[thing_get_sprite(&scene->things[thing_idx])->texture_idx];
-    gfx_draw_texture((Texture_t *)(ephemerals->bump_buffer+texture_offset),
-        scene->things[thing_idx].transform.x_pos - thing_get_sprite(&scene->things[thing_idx])->x_offset,
-        scene->things[thing_idx].transform.y_pos - thing_get_sprite(&scene->things[thing_idx])->y_offset);
+    Texture_t *texture_ptr = (Texture_t *)(ephemerals->bump_buffer+texture_offset);
+
+    int16_t x = scene->things[thing_idx].transform.x_pos - thing_get_sprite(&scene->things[thing_idx])->x_offset;
+    int16_t y = scene->things[thing_idx].transform.y_pos - thing_get_sprite(&scene->things[thing_idx])->y_offset;
+
+    gfx_world_to_screen_coords(&x, &y);
+
+    gfx_draw_texture(texture_ptr, x, y);
 }
 
 static void gfx_draw_all_things_debug(void)
@@ -1118,6 +1138,7 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
         load_scene_by_index(0);
 
         serializables->controlled_thing_idx = 0;
+        serializables->focal_thing_idx = 0;
         serializables->mov_speed = 1;
 
         serializables->initialized = true;
