@@ -16,6 +16,16 @@ typedef enum ThingFlags
     THING_FLAGS_SOUND = 0x20,
 } ThingFlags_t;
 
+typedef enum CollisionFlags
+{
+    COLL_FLAGS_NONE = 0x00,
+    COLL_FLAGS_BLOCK = 0x01,
+    COLL_FLAGS_PLAY_SOUND = 0x02,
+    COLL_FLAGS_SET_SCENE = 0x04,
+    COLL_FLAGS_SET_POSITION = 0x08,
+    COLL_FLAGS_CALLBACK = 0x10,
+} CollisionFlags_t;
+
 typedef struct Prefab
 {
     ThingFlags_t flags;
@@ -34,6 +44,10 @@ typedef struct Collider
     int16_t min_y;
     int16_t max_x;
     int16_t max_y;
+    CollisionFlags_t flags;
+    /// will hold sound idx, scene idx, position x, position y, callback index,
+    /// until morale/architecture improves
+    uint16_t params[5];
 } Collider_t;
 
 typedef struct SoundEmitter

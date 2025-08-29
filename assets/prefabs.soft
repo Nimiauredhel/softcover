@@ -8,6 +8,14 @@
 ## 16 CONTROL
 ## 32 SOUND
 #####
+## COLLISION FLAGS: ##
+## 0 NONE
+## 1 BLOCK
+## 2 PLAY SOUND
+## 4 SET SCENE
+## 8 SET POSITION
+## 16 CALLBACK INDEX
+#####
 ### character 1 ###
 # flags
 63
@@ -16,6 +24,9 @@
 # collision bounds
 # (min x, min y, max x, max y)
 -1 1 1 1
+# collision flags & params
+# (just block, all params zero)
+1 0 0 0 0 0
 # move sfx idx
 0
 ####
@@ -26,6 +37,9 @@
 1 3 6
 # coll
 -1 1 1 1
+# collision flags & params
+# (just block, all params zero)
+1 0 0 0 0 0
 # move sfx idx
 1
 ####
@@ -36,6 +50,9 @@
 2 6 3
 # coll
 -6 -2 6 1
+# collision flags & params
+# (just block, all params zero)
+1 0 0 0 0 0
 # move sfx idx omitted
 ####
 ### back wall tile ###
