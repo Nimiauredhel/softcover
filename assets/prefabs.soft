@@ -1,50 +1,56 @@
+#####
+## PREFAB FLAGS: ##
+## 0 NONE
+## 1 TRANSFORM
+## 2 TEXTURE
+## 4 COLLISION
+## 8 MOVEMENT
+## 16 CONTROL
+## 32 SOUND
+#####
 ### character 1 ###
-# texture idx
-0
+# flags
+63
+# texture id & offsets
+0 3 6
+# collision bounds
+# (min x, min y, max x, max y)
+-1 1 1 1
 # move sfx idx
 0
-# offsets
-4 6
-# coll
-6 2
 ####
 ### character 2 ###
-# texture idx
-1
+# flags
+63
+# texture id & offsets
+1 3 6
+# coll
+-1 1 1 1
 # move sfx idx
 1
-# offsets
-4 6
-# coll
-6 2
 ####
 ### pillar ###
-# texture idx
-2
-# move sfx idx
-0
-# offsets
-6 3
+# flags
+7
+# texture id & offsets
+2 6 3
 # coll
-12 2
+-6 -2 6 1
+# move sfx idx omitted
 ####
 ### back wall tile ###
-# texture idx
+# flags
 3
-# move sfx idx
-0
-# offsets
-0 0
-# coll
-0 0
+# texture id & offsets
+3 0 0
+# coll omitted
+# move sfx idx omitted
 ####
 ### floor tile ###
-# texture idx
-4
-# move sfx idx
-0
-# offsets
-0 0
-# coll
-0 0
+# flags
+3
+# texture id & offsets
+4 0 0
+# coll omitted
+# move sfx idx omitted
 ####

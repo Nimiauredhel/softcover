@@ -1,4 +1,5 @@
 #include "terminal_debug.h"
+#include "terminal_utils.h"
 #include "terminal_ncurses.h"
 
 static bool debug_is_break = false;
@@ -53,6 +54,8 @@ void debug_log(char *message)
 
 void debug_break(void)
 {
+    bool resume_for_termination = !should_terminate;
+
     if (gfx_is_initialized())
     {
         debug_is_break = true;
@@ -63,6 +66,7 @@ void debug_break(void)
 
     while(c != '\n')
     {
+        if (resume_for_termination && should_terminate) break;
         c = gfx_is_initialized() ? input_read() : fgetc(stdin);
     }
 
