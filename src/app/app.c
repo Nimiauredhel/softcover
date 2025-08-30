@@ -5,61 +5,14 @@
 #include "common_interface.h"
 #include "common_structs.h"
 
-#include "app_thing.h"
+#include "app_memory.h"
+#include "app_entity.h"
 #include "app_scene.h"
-
-#define APP_BUMP_SIZE (1024*2048)
-#define APP_SCRATCH_SIZE (4096)
-
-#define APP_TEXTURES_MAX_COUNT (64)
-#define APP_SOUNDS_MAX_COUNT (64)
-
-#define APP_LAYER_COUNT (6)
-#define APP_PREFABS_MAX_COUNT (32)
-
-#define APP_MAX_SCENES (16)
-
-typedef struct AppSerializables
-{
-    bool initialized;
-    uint16_t mov_speed;
-    uint16_t controlled_thing_idx;
-    uint16_t focal_thing_idx;
-    uint8_t scene_count;
-    uint8_t scene_index;
-    Scene_t scenes[APP_MAX_SCENES];
-} AppSerializable_t;
-
-typedef struct AppEphemera
-{
-    char debug_buff[DEBUG_MESSAGE_MAX_LEN];
-    uint8_t scratch[APP_SCRATCH_SIZE];
-
-    uint16_t prefabs_count;
-    Prefab_t prefabs[APP_PREFABS_MAX_COUNT];
-    Sprite_t sprites[APP_PREFABS_MAX_COUNT];
-    Collider_t colliders[APP_PREFABS_MAX_COUNT];
-    SoundEmitter_t sound_emitters[APP_PREFABS_MAX_COUNT];
-
-    uint16_t sounds_count;
-    size_t sound_offsets[APP_SOUNDS_MAX_COUNT];
-
-    uint16_t textures_count;
-    size_t texture_offsets[APP_TEXTURES_MAX_COUNT];
-
-    int32_t things_draw_order_layer_offsets[APP_LAYER_COUNT];
-    uint16_t things_draw_order[SCENE_THINGS_MAX_COUNT];
-
-    size_t bump_used;
-    uint8_t bump_buffer[APP_BUMP_SIZE];
-} AppEphemeral_t;
+#include "app_serializable_state.h"
+#include "app_ephemeral_state.h"
+#include "app_gfx.h"
 
 static const Platform_t *platform = NULL;
-static AppMemoryPartition_t *app = NULL;
-static AppSerializable_t *serializables = NULL;
-static AppEphemeral_t *ephemerals = NULL;
-
-static bool debug_gfx = false;
 
 static char input_read_from_buffer(UniformRing_t *input_buffer);
 static void input_process_all(void);
@@ -67,36 +20,27 @@ static void input_process_all(void);
 static size_t load_texture_to_memory(char *name);
 static size_t load_wav_to_memory(char *name);
 
-static void load_prefabs_all(void);
+static void load_definitions_all(void);
 
 static void audio_push_samples(float *samples, uint32_t len, uint8_t channels);
 static void audio_push_clip(AudioClip_t *clip);
 
-static void things_initialize_draw_order(void);
-static void things_update_draw_order(void);
-static void things_get_distance(uint16_t first_thing_id, uint16_t second_thing_id, int32_t *x_dist_out, int32_t *y_dist_out);
-static uint16_t thing_test_collision(uint16_t thing_id);
-static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta);
-static int32_t thing_create(uint16_t prefab_id, uint8_t layer, int32_t x, int32_t y);
-static void thing_set_pos(uint32_t thing_id, int32_t x, int32_t y);
-/*
-static void thing_set_texture(uint32_t thing_id, uint32_t texture_id, int16_t x_offset, int16_t y_offset, int16_t coll_width, int16_t coll_height);
-static void thing_set_move_sfx(uint32_t thing_id, uint32_t sfx_id);
-*/
-static int8_t things_compare_y(Thing_t *first, Thing_t *second);
-static int8_t things_compare_layer(Thing_t *first, Thing_t *second);
-static void things_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t (*comparer)(Thing_t*, Thing_t*));
-
-static void gfx_clear_buffer(void);
-static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y);
-static void gfx_draw_thing(uint32_t thing_idx);
-static void gfx_draw_all_things(void);
+static void entities_initialize_draw_order(void);
+static void entities_update_draw_order(void);
+static void entities_get_distance(uint16_t first_entity_id, uint16_t second_entity_id, int32_t *x_dist_out, int32_t *y_dist_out);
+static uint16_t entity_test_collision(uint16_t entity_id);
+static void entity_move(uint16_t entity_idx, int16_t x_delta, int16_t y_delta);
+static int32_t entity_create(uint16_t definition_id, uint8_t layer, int32_t x, int32_t y);
+static void entity_set_pos(uint32_t entity_id, int32_t x, int32_t y);
+static int8_t entities_compare_y(EntityLive_t *first, EntityLive_t *second);
+static int8_t entities_compare_layer(EntityLive_t *first, EntityLive_t *second);
+static void entities_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t (*comparer)(EntityLive_t*, EntityLive_t*));
 
 static void load_ephemerals(void);
 
 static char input_read_from_buffer(UniformRing_t *input_buffer)
 {
-    if (app == NULL || serializables == NULL) return '~';
+    if (input_buffer == NULL) return '~';
 
     int c = '~';
 
@@ -112,24 +56,24 @@ static void input_process_all(void)
 
     do
     {
-        input = input_read_from_buffer(app->input_buffer);
+        input = input_read_from_buffer(input_buffer);
 
         switch (input)
         {
             case 'w':
-                thing_move(serializables->controlled_thing_idx, 0, -serializables->mov_speed);
+                entity_move(serializables->controlled_entity_idx, 0, -serializables->mov_speed);
                 break;
             case 'a':
-                thing_move(serializables->controlled_thing_idx, -serializables->mov_speed, 0);
+                entity_move(serializables->controlled_entity_idx, -serializables->mov_speed, 0);
                 break;
             case 's':
-                thing_move(serializables->controlled_thing_idx, 0, serializables->mov_speed);
+                entity_move(serializables->controlled_entity_idx, 0, serializables->mov_speed);
                 break;
             case 'd':
-                thing_move(serializables->controlled_thing_idx, serializables->mov_speed, 0);
+                entity_move(serializables->controlled_entity_idx, serializables->mov_speed, 0);
                 break;
             case 'q':
-                serializables->controlled_thing_idx = serializables->controlled_thing_idx == 0 ? 1 : 0;
+                serializables->controlled_entity_idx = serializables->controlled_entity_idx == 0 ? 1 : 0;
                 break;
             case '1':
                 platform->storage_load_state("test_save");
@@ -228,16 +172,16 @@ static size_t load_wav_to_memory(char *name)
     return index;
 }
 
-static void load_prefabs_all(void)
+static void load_definitions_all(void)
 {
-    static const char *filename = "prefabs.soft";
+    static const char *filename = "definitions.soft";
 
     bzero(ephemerals->scratch, APP_SCRATCH_SIZE);
     size_t txt_len = platform->storage_load_text(filename, (char *)ephemerals->scratch, APP_SCRATCH_SIZE);
 
     if (txt_len > 0)
     {
-        ephemerals->prefabs_count = 0;
+        ephemerals->definitions_count = 0;
 
         char *current_line = (char *)ephemerals->scratch;
         char *next_line = NULL;
@@ -258,16 +202,16 @@ static void load_prefabs_all(void)
                 token = strtok(current_line, "=");
                 value = strtok(NULL, "=");
 
-                if (strcmp(token, "PREFAB") == 0)
+                if (strcmp(token, "DEFINITION") == 0)
                 {
-                    /// base prefab idx on prefab count
-                    current_idx = ephemerals->prefabs_count;
-                    /// increment prefab count
-                    ephemerals->prefabs_count++;
+                    /// base definition idx on definition count
+                    current_idx = ephemerals->definitions_count;
+                    /// increment definition count
+                    ephemerals->definitions_count++;
                     /// reset flags
-                    ephemerals->prefabs[current_idx].flags = THING_FLAGS_NONE;
-                    /// copy prefab name
-                    strncpy(ephemerals->prefabs[current_idx].name, value, sizeof(ephemerals->prefabs[current_idx].name)-1);
+                    ephemerals->definitions[current_idx].flags = THING_FLAGS_NONE;
+                    /// copy definition name
+                    strncpy(ephemerals->definitions[current_idx].name, value, sizeof(ephemerals->definitions[current_idx].name)-1);
                 }
                 else if (current_idx < 0)
                 {
@@ -277,7 +221,7 @@ static void load_prefabs_all(void)
                 }
                 else if (strcmp(token, "TEXTURE_ID") == 0)
                 {
-                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_TEXTURE;
+                    ephemerals->definitions[current_idx].flags |= THING_FLAGS_TEXTURE;
                     ephemerals->sprites[current_idx].texture_idx = atoi(value);
                 }
                 else if (strcmp(token, "TEXTURE_OFFSET_X") == 0)
@@ -290,44 +234,44 @@ static void load_prefabs_all(void)
                 }
                 else if (strcmp(token, "COLLISION_MIN_X") == 0)
                 {
-                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->definitions[current_idx].flags |= THING_FLAGS_COLLISION;
                     ephemerals->colliders[current_idx].min_x = atoi(value);
                 }
                 else if (strcmp(token, "COLLISION_MIN_Y") == 0)
                 {
-                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->definitions[current_idx].flags |= THING_FLAGS_COLLISION;
                     ephemerals->colliders[current_idx].min_y = atoi(value);
                 }
                 else if (strcmp(token, "COLLISION_MAX_X") == 0)
                 {
-                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->definitions[current_idx].flags |= THING_FLAGS_COLLISION;
                     ephemerals->colliders[current_idx].max_x = atoi(value);
                 }
                 else if (strcmp(token, "COLLISION_MAX_Y") == 0)
                 {
-                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->definitions[current_idx].flags |= THING_FLAGS_COLLISION;
                     ephemerals->colliders[current_idx].max_y = atoi(value);
                 }
                 else if (strcmp(token, "COLLISION_BLOCK") == 0)
                 {
-                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->definitions[current_idx].flags |= THING_FLAGS_COLLISION;
                     ephemerals->colliders[current_idx].flags |= COLL_FLAGS_BLOCK;
                 }
                 else if (strcmp(token, "COLLISION_SOUND") == 0)
                 {
-                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->definitions[current_idx].flags |= THING_FLAGS_COLLISION;
                     ephemerals->colliders[current_idx].flags |= COLL_FLAGS_PLAY_SOUND;
                     ephemerals->colliders[current_idx].params[0] = atoi(value);
                 }
                 else if (strcmp(token, "COLLISION_SET_SCENE") == 0)
                 {
-                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->definitions[current_idx].flags |= THING_FLAGS_COLLISION;
                     ephemerals->colliders[current_idx].flags |= COLL_FLAGS_SET_SCENE;
                     ephemerals->colliders[current_idx].params[1] = atoi(value);
                 }
                 else if (strcmp(token, "COLLISION_SET_POSITION") == 0)
                 {
-                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->definitions[current_idx].flags |= THING_FLAGS_COLLISION;
                     ephemerals->colliders[current_idx].flags |= COLL_FLAGS_SET_POSITION;
                     value = strtok(value, " ");
                     ephemerals->colliders[current_idx].params[2] = atoi(value);
@@ -336,13 +280,13 @@ static void load_prefabs_all(void)
                 }
                 else if (strcmp(token, "COLLISION_CALLBACK") == 0)
                 {
-                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->definitions[current_idx].flags |= THING_FLAGS_COLLISION;
                     ephemerals->colliders[current_idx].flags |= COLL_FLAGS_CALLBACK;
                     ephemerals->colliders[current_idx].params[4] = atoi(value);
                 }
                 else if (strcmp(token, "MOVE_SOUND") == 0)
                 {
-                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_SOUND;
+                    ephemerals->definitions[current_idx].flags |= THING_FLAGS_SOUND;
                     ephemerals->sound_emitters[current_idx].move_sfx_idx = atoi(value);
                 }
                 else
@@ -359,11 +303,11 @@ static void load_prefabs_all(void)
     }
 }
 
-static int32_t prefab_get_idx_by_name(char *name)
+static int32_t definition_get_idx_by_name(char *name)
 {
-    for (uint16_t i = 0; i < ephemerals->prefabs_count; i++)
+    for (uint16_t i = 0; i < ephemerals->definitions_count; i++)
     {
-        if (strcmp(name, ephemerals->prefabs[i].name) == 0)
+        if (strcmp(name, ephemerals->definitions[i].name) == 0)
         {
             return i;
         }
@@ -372,28 +316,28 @@ static int32_t prefab_get_idx_by_name(char *name)
     return -1;
 }
 
-static int32_t prefab_clone(int32_t src_idx, char *clone_name)
+static int32_t definition_clone(int32_t src_idx, char *clone_name)
 {
-    if (ephemerals->prefabs_count >= APP_PREFABS_MAX_COUNT)
+    if (ephemerals->definitions_count >= APP_ENTITY_DEFS_MAX_COUNT)
     {
-        platform->debug_log("Cannot clone prefab: limit reached.");
+        platform->debug_log("Cannot clone definition: limit reached.");
         return -1;
     } 
-    else if (src_idx < 0 || src_idx >= APP_PREFABS_MAX_COUNT)
+    else if (src_idx < 0 || src_idx >= APP_ENTITY_DEFS_MAX_COUNT)
     {
-        platform->debug_log("Cannot clone prefab: invalid source index.");
+        platform->debug_log("Cannot clone definition: invalid source index.");
         return -1;
     }    
 
-    int32_t dst_idx = ephemerals->prefabs_count;
-    ephemerals->prefabs_count++;
+    int32_t dst_idx = ephemerals->definitions_count;
+    ephemerals->definitions_count++;
 
     /// ISSUE: this currently needs to be updated every time a new component is added
-    memcpy(ephemerals->prefabs+dst_idx, ephemerals->prefabs+src_idx, sizeof(Prefab_t));
+    memcpy(ephemerals->definitions+dst_idx, ephemerals->definitions+src_idx, sizeof(EntityDefinition_t));
     memcpy(ephemerals->sprites+dst_idx, ephemerals->sprites+src_idx, sizeof(Sprite_t));
     memcpy(ephemerals->colliders+dst_idx, ephemerals->colliders+src_idx, sizeof(Collider_t));
     memcpy(ephemerals->sound_emitters+dst_idx, ephemerals->sound_emitters+src_idx, sizeof(SoundEmitter_t));
-    strncpy(ephemerals->prefabs[dst_idx].name, clone_name, sizeof(ephemerals->prefabs[dst_idx].name));
+    strncpy(ephemerals->definitions[dst_idx].name, clone_name, sizeof(ephemerals->definitions[dst_idx].name));
 
     return dst_idx;
 }
@@ -412,7 +356,7 @@ static void load_scene_by_path(char *path)
         char *value = NULL;
 
         uint32_t line_num = 0;
-        int32_t prefab_index = -1;
+        int32_t definition_index = -1;
         uint16_t layer_index = 0;
         uint16_t x_pos = 0;
         uint16_t y_pos = 0;
@@ -428,11 +372,11 @@ static void load_scene_by_path(char *path)
                 token = strtok(current_line, "=");
                 value = strtok(NULL, "=");
 
-                if (strcmp(token, "PREFAB") == 0)
+                if (strcmp(token, "DEFINITION") == 0)
                 {
-                    prefab_index = prefab_get_idx_by_name(value);
+                    definition_index = definition_get_idx_by_name(value);
                 }
-                else if (prefab_index < 0)
+                else if (definition_index < 0)
                 {
                     snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff),
                             "Out of sequence entry (%s:%u): [%s].", path, line_num, current_line); 
@@ -448,37 +392,37 @@ static void load_scene_by_path(char *path)
                     x_pos = atoi(value);
                     value = strtok(NULL, " ");
                     y_pos = atoi(value);
-                    thing_create(prefab_index, layer_index, x_pos, y_pos);
+                    entity_create(definition_index, layer_index, x_pos, y_pos);
                 }
                 else if (strcmp(token, "VARIANT") == 0)
                 {
-                    /// scene file is specifying and naming a variant of the selected prefab.
-                    /// if a prefab with the requested name was already created, use it.
-                    int32_t src_idx = prefab_index;
-                    prefab_index = prefab_get_idx_by_name(value);
-                    /// else, clone the base prefab.
-                    if (prefab_index < 0)
+                    /// scene file is specifying and naming a variant of the selected definition.
+                    /// if a definition with the requested name was already created, use it.
+                    int32_t src_idx = definition_index;
+                    definition_index = definition_get_idx_by_name(value);
+                    /// else, clone the base definition.
+                    if (definition_index < 0)
                     {
-                        prefab_index = prefab_clone(src_idx, value);
+                        definition_index = definition_clone(src_idx, value);
                     }
                 }
                 else if (strcmp(token, "COLLISION_SET_SCENE") == 0)
                 {
-                    ephemerals->colliders[prefab_index].flags |= COLL_FLAGS_SET_SCENE;
-                    ephemerals->colliders[prefab_index].params[1] = atoi(value);
+                    ephemerals->colliders[definition_index].flags |= COLL_FLAGS_SET_SCENE;
+                    ephemerals->colliders[definition_index].params[1] = atoi(value);
                 }
                 else if (strcmp(token, "COLLISION_SET_POSITION") == 0)
                 {
-                    ephemerals->colliders[prefab_index].flags |= COLL_FLAGS_SET_POSITION;
+                    ephemerals->colliders[definition_index].flags |= COLL_FLAGS_SET_POSITION;
                     value = strtok(value, " ");
-                    ephemerals->colliders[prefab_index].params[2] = atoi(value);
+                    ephemerals->colliders[definition_index].params[2] = atoi(value);
                     value = strtok(NULL, " ");
-                    ephemerals->colliders[prefab_index].params[3] = atoi(value);
+                    ephemerals->colliders[definition_index].params[3] = atoi(value);
                 }
                 else if (strcmp(token, "COLLISION_CALLBACK") == 0)
                 {
-                    ephemerals->colliders[prefab_index].flags |= COLL_FLAGS_CALLBACK;
-                    ephemerals->colliders[prefab_index].params[4] = atoi(value);
+                    ephemerals->colliders[definition_index].flags |= COLL_FLAGS_CALLBACK;
+                    ephemerals->colliders[definition_index].params[4] = atoi(value);
                 }
                 else
                 {
@@ -495,10 +439,10 @@ static void load_scene_by_path(char *path)
         serializables->scenes[serializables->scene_index].loaded = true;
 
         snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff),
-                "Loaded scene [%s], thing count: %u", path, serializables->scenes[serializables->scene_index].things_count);
+                "Loaded scene [%s], entity count: %u", path, serializables->scenes[serializables->scene_index].entity_count);
         platform->debug_log(ephemerals->debug_buff);
 
-        things_initialize_draw_order();
+        entities_initialize_draw_order();
     }
     else
     {
@@ -514,7 +458,7 @@ static void load_scene_by_index(uint8_t index)
     if (serializables->scenes[index].loaded)
     {
         serializables->scene_index = index;
-        things_initialize_draw_order();
+        entities_initialize_draw_order();
         return;
     }
 
@@ -561,11 +505,11 @@ static void load_scene_by_index(uint8_t index)
 
 static void audio_push_samples(float *samples, uint32_t len, uint8_t channels)
 {
-    if (app == NULL || app->audio_buffer == NULL) return;
+    if (audio_buffer == NULL) return;
 
     if (channels == platform->settings->audio_channels)
     {
-        ring_push(app->audio_buffer, samples, len, false);
+        ring_push(audio_buffer, samples, len, false);
     }
     else
     {
@@ -573,7 +517,7 @@ static void audio_push_samples(float *samples, uint32_t len, uint8_t channels)
         {
             for (uint8_t j = 0; j < platform->settings->audio_channels; j++)
             {
-                ring_push(app->audio_buffer, samples+i+j, 1, false);
+                ring_push(audio_buffer, samples+i+j, 1, false);
             }
         }
     }
@@ -584,91 +528,54 @@ static void audio_push_clip(AudioClip_t *clip)
     audio_push_samples(clip->samples, clip->num_samples, clip->num_channels);
 }
 
-static int32_t thing_create(uint16_t prefab_id, uint8_t layer, int32_t x, int32_t y)
+static int32_t entity_create(uint16_t definition_id, uint8_t layer, int32_t x, int32_t y)
 {
-    uint16_t index = serializables->scenes[serializables->scene_index].things_count;
+    uint16_t index = serializables->scenes[serializables->scene_index].entity_count;
 
-    if (index >= SCENE_THINGS_MAX_COUNT)
+    if (index >= SCENE_ENTITIES_MAX_COUNT)
     {
-        platform->debug_log("Cannot create new Thing, reached maximum.");
+        platform->debug_log("Cannot add new entity, limit reached.");
         return -1;
     }
 
-    serializables->scenes[serializables->scene_index].things_count++;
+    serializables->scenes[serializables->scene_index].entity_count++;
 
-    Thing_t *thing = &serializables->scenes[serializables->scene_index].things[index];
+    EntityLive_t *entity = &serializables->scenes[serializables->scene_index].entities[index];
 
-    thing->used = true;
-    thing->layer = layer;
-    thing->prefab_idx = prefab_id;
+    entity->used = true;
+    entity->layer = layer;
+    entity->definition_idx = definition_id;
 
-    thing->transform.x_pos = x;
-    thing->transform.y_pos = y;
+    entity->transform.x_pos = x;
+    entity->transform.y_pos = y;
 
     snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Created new %s[%u] at index %u, [%u,%u] layer %u.",
-            ephemerals->prefabs[prefab_id].name, prefab_id, index, x, y, layer);
+            ephemerals->definitions[definition_id].name, definition_id, index, x, y, layer);
     platform->debug_log(ephemerals->debug_buff);
 
     return index;
 }
 
-static void thing_set_pos(uint32_t thing_id, int32_t x, int32_t y)
+static void entity_set_pos(uint32_t entity_id, int32_t x, int32_t y)
 {
-    serializables->scenes[serializables->scene_index].things[thing_id].transform.x_pos = x;
-    serializables->scenes[serializables->scene_index].things[thing_id].transform.y_pos = y;
+    serializables->scenes[serializables->scene_index].entities[entity_id].transform.x_pos = x;
+    serializables->scenes[serializables->scene_index].entities[entity_id].transform.y_pos = y;
 
-    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Set Thing %u at position [%u,%u].", thing_id, x, y);
+    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Set Thing %u at position [%u,%u].", entity_id, x, y);
     platform->debug_log(ephemerals->debug_buff);
 }
 
-/*
-static void thing_set_texture(uint32_t thing_id, uint32_t texture_id, int16_t x_offset, int16_t y_offset, int16_t coll_width, int16_t coll_height)
+static int8_t entities_compare_y(EntityLive_t *first, EntityLive_t *second)
 {
-    serializables->things[thing_id].texture_idx = texture_id;
-    serializables->things[thing_id].x_offset = x_offset;
-    serializables->things[thing_id].x_offset = y_offset;
-    serializables->things[thing_id].coll_width = coll_width;
-    serializables->things[thing_id].coll_height = coll_height;
-
+    return (first->transform.y_pos + entity_get_sprite(first)->y_offset) - (second->transform.y_pos + entity_get_sprite(second)->y_offset);
 }
 
-static void thing_set_move_sfx(uint32_t thing_id, uint32_t sfx_id)
-{
-    serializables->things[thing_id].move_sfx_idx = sfx_id;
-}
-*/
-
-static Prefab_t* thing_get_prefab(Thing_t *thing)
-{
-    return &ephemerals->prefabs[thing->prefab_idx];
-}
-
-static Sprite_t* thing_get_sprite(Thing_t *thing)
-{
-    return &ephemerals->sprites[thing->prefab_idx];
-}
-
-static Collider_t* thing_get_collider(Thing_t *thing)
-{
-    return &ephemerals->colliders[thing->prefab_idx];
-}
-
-static SoundEmitter_t* thing_get_sounds(Thing_t *thing)
-{
-    return &ephemerals->sound_emitters[thing->prefab_idx];
-}
-
-static int8_t things_compare_y(Thing_t *first, Thing_t *second)
-{
-    return (first->transform.y_pos + thing_get_sprite(first)->y_offset) - (second->transform.y_pos + thing_get_sprite(second)->y_offset);
-}
-
-static int8_t things_compare_layer(Thing_t *first, Thing_t *second)
+static int8_t entities_compare_layer(EntityLive_t *first, EntityLive_t *second)
 {
     return first->layer - second->layer;
 }
 
-static void things_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t (*comparer)(Thing_t*, Thing_t*))
+static void entities_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t (*comparer)(EntityLive_t*, EntityLive_t*))
 {
     uint16_t temp;
     bool swapped = false;
@@ -677,7 +584,7 @@ static void things_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t
 
     for (; end_idx > start_idx; end_idx--)
     {
-        if (!scene->things[ephemerals->things_draw_order[end_idx]].used)
+        if (!scene->entities[ephemerals->entities_draw_order[end_idx]].used)
         {
             continue;
         }
@@ -687,14 +594,14 @@ static void things_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t
         for (uint16_t i = start_idx; i < end_idx; i++)
         {
             if (comparer(
-                        scene->things+ephemerals->things_draw_order[i],
-                        scene->things+ephemerals->things_draw_order[i+1])
+                        scene->entities+ephemerals->entities_draw_order[i],
+                        scene->entities+ephemerals->entities_draw_order[i+1])
                         > 0)
             {
                 swapped = true;
-                temp = ephemerals->things_draw_order[i];
-                ephemerals->things_draw_order[i] = ephemerals->things_draw_order[i+1];
-                ephemerals->things_draw_order[i+1] = temp;
+                temp = ephemerals->entities_draw_order[i];
+                ephemerals->entities_draw_order[i] = ephemerals->entities_draw_order[i+1];
+                ephemerals->entities_draw_order[i+1] = temp;
             }
         }
 
@@ -702,57 +609,57 @@ static void things_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t
     }
 }
 
-static void things_initialize_draw_order(void)
+static void entities_initialize_draw_order(void)
 {
     Scene_t *scene = &serializables->scenes[serializables->scene_index];
 
-    if (scene->things_count <= 0)
+    if (scene->entity_count <= 0)
     {
-        platform->debug_log("Cannot initialize draw order - thing count is zero!");
+        platform->debug_log("Cannot initialize draw order - entity count is zero!");
         return;
     }
 
     /// initialize unsorted state
-    for (uint16_t i = 0; i < scene->things_count; i++)
+    for (uint16_t i = 0; i < scene->entity_count; i++)
     {
-        ephemerals->things_draw_order[i] = i;
+        ephemerals->entities_draw_order[i] = i;
     }
 
-    /// initialize layer offsets to -1, e.g. no things using that layer
+    /// initialize layer offsets to -1, e.g. no entities using that layer
     for (uint8_t i = 0; i < APP_LAYER_COUNT; i++)
     {
-        ephemerals->things_draw_order_layer_offsets[i] = -1;
+        ephemerals->entities_draw_order_layer_offsets[i] = -1;
     }
 
-    things_sort_by_comparer(0, scene->things_count-1, things_compare_layer);
+    entities_sort_by_comparer(0, scene->entity_count-1, entities_compare_layer);
 
     uint8_t layer = 0;
-    Thing_t *thing;
+    EntityLive_t *entity;
 
     // default layer 0 offset before the actual work
-    thing = scene->things+ephemerals->things_draw_order[0];
-    layer = thing->layer;
-    ephemerals->things_draw_order_layer_offsets[thing->layer] = 0;
+    entity = scene->entities+ephemerals->entities_draw_order[0];
+    layer = entity->layer;
+    ephemerals->entities_draw_order_layer_offsets[entity->layer] = 0;
 
-    for (uint16_t i = 1; i < scene->things_count; i++)
+    for (uint16_t i = 1; i < scene->entity_count; i++)
     {
-        thing = scene->things+ephemerals->things_draw_order[i];
+        entity = scene->entities+ephemerals->entities_draw_order[i];
 
-        if (thing->layer > layer)
+        if (entity->layer > layer)
         {
-            layer = thing->layer;
-            ephemerals->things_draw_order_layer_offsets[layer] = i;
+            layer = entity->layer;
+            ephemerals->entities_draw_order_layer_offsets[layer] = i;
         }
     }
 }
 
-static void things_update_draw_order(void)
+static void entities_update_draw_order(void)
 {
     Scene_t *scene = &serializables->scenes[serializables->scene_index];
 
-    if (scene->things_count <= 0)
+    if (scene->entity_count <= 0)
     {
-        platform->debug_log("Cannot update draw order - thing count is zero!");
+        platform->debug_log("Cannot update draw order - entity count is zero!");
         return;
     }
 
@@ -761,7 +668,7 @@ static void things_update_draw_order(void)
 
     for (int8_t i = 0; i < APP_LAYER_COUNT; i++)
     {
-        start_idx = ephemerals->things_draw_order_layer_offsets[i];
+        start_idx = ephemerals->entities_draw_order_layer_offsets[i];
 
         if (start_idx < 0) continue;
 
@@ -769,96 +676,96 @@ static void things_update_draw_order(void)
 
         for (int8_t j = i+1; j < APP_LAYER_COUNT; j++)
         {
-            if (ephemerals->things_draw_order_layer_offsets[j] > start_idx)
+            if (ephemerals->entities_draw_order_layer_offsets[j] > start_idx)
             {
-                end_idx = ephemerals->things_draw_order_layer_offsets[j] - 1;
+                end_idx = ephemerals->entities_draw_order_layer_offsets[j] - 1;
                 break;
             }
         }
 
         if (end_idx < 0)
         {
-            things_sort_by_comparer(start_idx, scene->things_count - 1, things_compare_y);
+            entities_sort_by_comparer(start_idx, scene->entity_count - 1, entities_compare_y);
             break;
         }
 
-        things_sort_by_comparer(start_idx, end_idx, things_compare_y);
+        entities_sort_by_comparer(start_idx, end_idx, entities_compare_y);
     }
 }
 
-static void things_get_distance(uint16_t first_thing_id, uint16_t second_thing_id, int32_t *x_dist_out, int32_t *y_dist_out)
+static void entities_get_distance(uint16_t first_entity_id, uint16_t second_entity_id, int32_t *x_dist_out, int32_t *y_dist_out)
 {
     Scene_t *scene = &serializables->scenes[serializables->scene_index];
 
-    *x_dist_out = scene->things[first_thing_id].transform.x_pos - scene->things[second_thing_id].transform.x_pos;
-    *y_dist_out = scene->things[first_thing_id].transform.y_pos - scene->things[second_thing_id].transform.y_pos;
+    *x_dist_out = scene->entities[first_entity_id].transform.x_pos - scene->entities[second_entity_id].transform.x_pos;
+    *y_dist_out = scene->entities[first_entity_id].transform.y_pos - scene->entities[second_entity_id].transform.y_pos;
 
     if (*x_dist_out < 0) *x_dist_out *= -1;
     if (*y_dist_out < 0) *y_dist_out *= -1;
 }
 
-static uint16_t thing_test_collision(uint16_t thing_id)
+static uint16_t entity_test_collision(uint16_t entity_id)
 {
     Scene_t *scene = &serializables->scenes[serializables->scene_index];
-    if (!(ephemerals->prefabs[scene->things[thing_id].prefab_idx].flags & THING_FLAGS_COLLISION)) return thing_id;
+    if (!(ephemerals->definitions[scene->entities[entity_id].definition_idx].flags & THING_FLAGS_COLLISION)) return entity_id;
 
-    Transform_t *thing_transform = &scene->things[thing_id].transform;
-    Collider_t *thing_collider = &ephemerals->colliders[scene->things[thing_id].prefab_idx];
+    Transform_t *this_transform = &scene->entities[entity_id].transform;
+    Collider_t *this_collider = &ephemerals->colliders[scene->entities[entity_id].definition_idx];
 
     Transform_t *other_transform = NULL;
     Collider_t *other_collider = NULL;
 
-    int16_t thing_left =   thing_transform->x_pos + thing_collider->min_x;
-    int16_t thing_right =  thing_transform->x_pos + thing_collider->max_x;
-    int16_t thing_top =    thing_transform->y_pos + thing_collider->min_y;
-    int16_t thing_bottom = thing_transform->y_pos + thing_collider->max_y;
+    int16_t this_left =   this_transform->x_pos + this_collider->min_x;
+    int16_t this_right =  this_transform->x_pos + this_collider->max_x;
+    int16_t this_top =    this_transform->y_pos + this_collider->min_y;
+    int16_t this_bottom = this_transform->y_pos + this_collider->max_y;
 
     int16_t other_left = 0;
     int16_t other_right = 0;
     int16_t other_top = 0;
     int16_t other_bottom = 0;
 
-    for (uint16_t i = 0; i < scene->things_count; i++)
+    for (uint16_t i = 0; i < scene->entity_count; i++)
     {
         /// avoid testing against self
-        if (i == thing_id) continue;
+        if (i == entity_id) continue;
         /// avoid testing against non-collider
-        if (!(ephemerals->prefabs[scene->things[i].prefab_idx].flags & THING_FLAGS_COLLISION)) continue;
+        if (!(ephemerals->definitions[scene->entities[i].definition_idx].flags & THING_FLAGS_COLLISION)) continue;
 
-        other_transform = &scene->things[i].transform;
-        other_collider = &ephemerals->colliders[scene->things[i].prefab_idx];
+        other_transform = &scene->entities[i].transform;
+        other_collider = &ephemerals->colliders[scene->entities[i].definition_idx];
 
         other_left =   other_transform->x_pos + other_collider->min_x;
         other_right =  other_transform->x_pos + other_collider->max_x;
         other_top =    other_transform->y_pos + other_collider->min_y;
         other_bottom = other_transform->y_pos + other_collider->max_y;
 
-        if(thing_right >= other_left
-        && thing_left <= other_right
-        && thing_top <= other_bottom
-        && thing_bottom >= other_top)
+        if(this_right >= other_left
+        && this_left <= other_right
+        && this_top <= other_bottom
+        && this_bottom >= other_top)
         {
-            snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Thing %d collided with Thing %d.", thing_id, i);
+            snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Thing %d collided with Thing %d.", entity_id, i);
             platform->debug_log(ephemerals->debug_buff);
             return i;
         }
     }
 
-    return thing_id;
+    return entity_id;
 }
 
-static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta)
+static void entity_move(uint16_t entity_id, int16_t x_delta, int16_t y_delta)
 {
     Scene_t *scene = &serializables->scenes[serializables->scene_index];
 
-    if (!scene->things[thing_idx].used) return;
+    if (!scene->entities[entity_id].used) return;
 
-    scene->things[thing_idx].transform.x_pos += x_delta;
-    scene->things[thing_idx].transform.y_pos += y_delta;
+    scene->entities[entity_id].transform.x_pos += x_delta;
+    scene->entities[entity_id].transform.y_pos += y_delta;
 
-    uint16_t other_idx = thing_test_collision(thing_idx);
+    uint16_t other_idx = entity_test_collision(entity_id);
 
-    if (other_idx != thing_idx)
+    if (other_idx != entity_id)
     {
         /*
     COLL_FLAGS_NONE = 0x00,
@@ -870,11 +777,11 @@ static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta)
     */
         /// intentional copy to survive a potential possible scene transition
         /// TODO: make this hack unnecessary
-        Collider_t other_coll_copy = ephemerals->colliders[scene->things[other_idx].prefab_idx];
+        Collider_t other_coll_copy = ephemerals->colliders[scene->entities[other_idx].definition_idx];
 
         if (other_coll_copy.flags & COLL_FLAGS_BLOCK)
         {
-            thing_set_pos(thing_idx, scene->things[thing_idx].transform.x_pos - x_delta, scene->things[thing_idx].transform.y_pos - y_delta);
+            entity_set_pos(entity_id, scene->entities[entity_id].transform.x_pos - x_delta, scene->entities[entity_id].transform.y_pos - y_delta);
         }
 
         if (other_coll_copy.flags & COLL_FLAGS_PLAY_SOUND)
@@ -883,16 +790,16 @@ static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta)
         }
 
         if ((other_coll_copy.flags & COLL_FLAGS_SET_SCENE)
-            && thing_idx == serializables->controlled_thing_idx)
+            && entity_id == serializables->controlled_entity_idx)
         {
             load_scene_by_index(other_coll_copy.params[1]);
             /// TODO: this is obviously a bad way to do it and needs to go later
-            serializables->controlled_thing_idx = thing_idx;
+            serializables->controlled_entity_idx = entity_id;
         }
 
         if (other_coll_copy.flags & COLL_FLAGS_SET_POSITION)
         {
-            thing_set_pos(thing_idx, other_coll_copy.params[2], other_coll_copy.params[3]);
+            entity_set_pos(entity_id, other_coll_copy.params[2], other_coll_copy.params[3]);
         }
 
         if (other_coll_copy.flags & COLL_FLAGS_CALLBACK)
@@ -903,190 +810,13 @@ static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta)
         return;
     }
 
-    size_t sfx_offset = ephemerals->sound_offsets[thing_get_sounds(&scene->things[thing_idx])->move_sfx_idx];
+    size_t sfx_offset = ephemerals->sound_offsets[entity_get_sounds(&scene->entities[entity_id])->move_sfx_idx];
     audio_push_clip((AudioClip_t *)(ephemerals->bump_buffer+sfx_offset));
     /*
-    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Thing %d moved to [%d,%d]", thing_idx,
-            serializables->things[thing_idx].x_pos, serializables->things[thing_idx].y_pos);
+    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Thing %d moved to [%d,%d]", entity_idx,
+            serializables->entities[entity_idx].x_pos, serializables->entities[entity_idx].y_pos);
     platform->debug_log(ephemerals->debug_buff);
     */
-}
-
-static void gfx_world_to_screen_coords(int16_t *x_ptr, int16_t *y_ptr)
-{
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
-
-    *x_ptr += app->gfx_buffer->width/2;
-    *x_ptr -= scene->things[serializables->focal_thing_idx].transform.x_pos;
-    *y_ptr += app->gfx_buffer->height/2;
-    *y_ptr -= scene->things[serializables->focal_thing_idx].transform.y_pos;
-}
-
-static void gfx_clear_buffer(void)
-{
-    if (app == NULL || app->gfx_buffer == NULL) return;
-    memset(app->gfx_buffer->pixels, 0,
-    app->gfx_buffer->width * app->gfx_buffer->height * app->gfx_buffer->pixel_size_bytes);
-}
-
-static void gfx_draw_texture(Texture_t *texture, int start_x, int start_y)
-{
-    if (app == NULL || app->gfx_buffer == NULL) return;
-
-    int pixel_x;
-    int pixel_y;
-
-    for (uint16_t texture_y = 0; texture_y < texture->height; texture_y++)
-    {
-        pixel_y = start_y + texture_y;
-        if (pixel_y >= app->gfx_buffer->height || pixel_y < 0) continue;
-
-        for (uint16_t texture_x = 0; texture_x < texture->width; texture_x++)
-        {
-            pixel_x = start_x + texture_x;
-            if (pixel_x >= app->gfx_buffer->width  || pixel_x < 0) continue;
-
-            uint16_t texture_idx = texture->pixel_size_bytes * (texture_x + (texture_y * texture->width));
-            uint16_t buffer_idx = app->gfx_buffer->pixel_size_bytes * (pixel_x + (pixel_y * app->gfx_buffer->width));
-
-            /// extremely dumb alpha test
-            /// TODO: somehow move this responsibility to the platform side
-            if ((texture->pixel_size_bytes == 1 && texture->pixels[texture_idx] > 64)
-             || (texture->pixel_size_bytes == 4 && texture->pixels[texture_idx+3] == 0))
-            {
-                continue;
-            }
-
-            for (uint8_t i = 0; i < app->gfx_buffer->pixel_size_bytes; i++)
-            {
-                app->gfx_buffer->pixels[buffer_idx+i] = texture->pixels[texture_idx+i];
-            }
-        }
-    }
-}
-
-static void gfx_debug_draw_collider(uint32_t thing_idx, uint32_t draw_val)
-{
-    if (app == NULL || app->gfx_buffer == NULL) return;
-
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
-
-    if (!scene->things[thing_idx].used) return;
-    if (!(ephemerals->prefabs[scene->things[thing_idx].prefab_idx].flags & THING_FLAGS_COLLISION)) return;
-
-    Transform_t *transform = &scene->things[thing_idx].transform;
-    Collider_t *collider = &ephemerals->colliders[scene->things[thing_idx].prefab_idx];
-
-    int16_t min_x = collider->min_x + transform->x_pos;
-    int16_t min_y = collider->min_y + transform->y_pos;
-    int16_t max_x = collider->max_x + transform->x_pos;
-    int16_t max_y = collider->max_y + transform->y_pos;
-
-    gfx_world_to_screen_coords(&min_x, &min_y);
-    gfx_world_to_screen_coords(&max_x, &max_y);
-
-    for (int16_t y = min_y; y <= max_y; y++)
-    {
-        if (y == min_y || y == max_y)
-        {
-            for (int16_t x = min_x; x <= max_x; x++)
-            {
-                if (x < 0 || x >= app->gfx_buffer->width || y < 0 || y >= app->gfx_buffer->height) continue;
-                uint16_t buffer_idx = app->gfx_buffer->pixel_size_bytes * (x + (y * app->gfx_buffer->width));
-
-                for (int i = 0; i < app->gfx_buffer->pixel_size_bytes; i++)
-                {
-                    app->gfx_buffer->pixels[buffer_idx+i] = draw_val;
-                }
-            }
-        }
-        else
-        {
-            if (min_x >= 0 && min_x < app->gfx_buffer->width && y >= 0 && y < app->gfx_buffer->height)
-            {
-                uint16_t buffer_idx = app->gfx_buffer->pixel_size_bytes * (min_x + (y * app->gfx_buffer->width));
-
-                for (int i = 0; i < app->gfx_buffer->pixel_size_bytes; i++)
-                {
-                    app->gfx_buffer->pixels[buffer_idx+i] = draw_val;
-                }
-            }
-
-            if (max_x >= 0 && max_x < app->gfx_buffer->width && y >= 0 && y < app->gfx_buffer->height)
-            {
-                uint16_t buffer_idx = app->gfx_buffer->pixel_size_bytes * (max_x + (y * app->gfx_buffer->width));
-
-                for (int i = 0; i < app->gfx_buffer->pixel_size_bytes; i++)
-                {
-                    app->gfx_buffer->pixels[buffer_idx+i] = draw_val;
-                }
-            }
-        }
-    }
-}
-
-static void gfx_draw_thing(uint32_t thing_idx)
-{
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
-
-    if (!scene->things[thing_idx].used) return;
-
-    size_t texture_offset = ephemerals->texture_offsets[thing_get_sprite(&scene->things[thing_idx])->texture_idx];
-    Texture_t *texture_ptr = (Texture_t *)(ephemerals->bump_buffer+texture_offset);
-
-    int16_t x = scene->things[thing_idx].transform.x_pos - thing_get_sprite(&scene->things[thing_idx])->x_offset;
-    int16_t y = scene->things[thing_idx].transform.y_pos - thing_get_sprite(&scene->things[thing_idx])->y_offset;
-
-    gfx_world_to_screen_coords(&x, &y);
-
-    gfx_draw_texture(texture_ptr, x, y);
-}
-
-static void gfx_draw_all_things_debug(void)
-{
-    static uint16_t step = 0;
-
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
-
-    Thing_t *step_thing = scene->things+ephemerals->things_draw_order[step];
-    /*
-    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff),
-            "Thing %u [%u,%u] layer %u.", ephemerals->things_draw_order[step],
-            step_thing->transform.x_pos, step_thing->transform.y_pos, step_thing->layer);
-    platform->debug_log(ephemerals->debug_buff);
-    */
-    //platform->debug_break();
-    step = scene->things_count;
-
-    for (uint16_t i = 0; i < step; i++)
-    {
-        gfx_draw_thing(ephemerals->things_draw_order[i]);
-    }
-
-    for (uint16_t i = 0; i < step; i++)
-    {
-        gfx_debug_draw_collider(ephemerals->things_draw_order[i], 2);
-    }
-
-    /*
-    step++;
-
-    if (step >= scene->things_count)
-    {
-        step = 0;
-        debug_gfx = false;
-    }
-    */
-}
-
-static void gfx_draw_all_things(void)
-{
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
-
-    for (uint16_t i = 0; i < scene->things_count; i++)
-    {
-        gfx_draw_thing(ephemerals->things_draw_order[i]);
-    }
 }
 
 static void load_ephemerals(void)
@@ -1143,13 +873,12 @@ static void load_ephemerals(void)
                 load_wav_to_memory(current_line);
             }
 
-            //if (next_line) *next_line = '\n';
             current_line = next_line ? next_line + 1 : NULL;
         }
     }
 
-    /// load all prefabs according to file
-    load_prefabs_all();
+    /// load all definitions according to file
+    load_definitions_all();
 }
 
 /// must match prototype @ref AppSetupFunc
@@ -1175,7 +904,7 @@ void app_setup(Platform_t *interface)
 
     platform->settings->input_buffer_capacity = 128;
 
-    size_t required_state_memory = sizeof(AppSerializable_t) + sizeof(AppEphemeral_t);
+    size_t required_state_memory = sizeof(AppSerializableState_t) + sizeof(AppEphemeralState_t);
 
     size_t required_memory_total = required_state_memory + required_gfx_memory
         + sizeof(UniformRing_t) + (sizeof(float) * platform->settings->audio_buffer_capacity)
@@ -1189,8 +918,8 @@ void app_setup(Platform_t *interface)
 
     if (sufficient)
     {
-        platform->settings->app_memory_serializable_bytes = sizeof(AppSerializable_t);
-        platform->settings->app_memory_ephemeral_bytes = sizeof(AppEphemeral_t);
+        platform->settings->app_memory_serializable_bytes = sizeof(AppSerializableState_t);
+        platform->settings->app_memory_ephemeral_bytes = sizeof(AppEphemeralState_t);
     }
     else
     {
@@ -1216,9 +945,11 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
         return;
     }
 
-    app = memory;
-    ephemerals = (AppEphemeral_t *)app->ephemeral->buffer;
-    serializables = (AppSerializable_t *)app->serializable->buffer;
+    input_buffer = memory->input_buffer;
+    gfx_buffer = memory->gfx_buffer;
+    audio_buffer = memory->audio_buffer;
+    ephemerals = (AppEphemeralState_t *)memory->ephemeral->buffer;
+    serializables = (AppSerializableState_t *)memory->serializable->buffer;
 
     /// EPHEMERALS
     load_ephemerals();
@@ -1237,31 +968,31 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
 
         load_scene_by_index(0);
 
-        serializables->controlled_thing_idx = 0;
-        serializables->focal_thing_idx = 0;
+        serializables->controlled_entity_idx = 0;
+        serializables->focal_entity_idx = 0;
         serializables->mov_speed = 1;
 
         serializables->initialized = true;
     }
 
-    things_initialize_draw_order();
-    things_update_draw_order();
+    entities_initialize_draw_order();
+    entities_update_draw_order();
 }
 
 /// must match prototype @ref AppLoopFunc
 void app_loop(void)
 {
     input_process_all();
-    things_update_draw_order();
+    entities_update_draw_order();
     gfx_clear_buffer();
 
     if(debug_gfx)
     {
-        gfx_draw_all_things_debug();
+        gfx_draw_all_entities_debug();
     }
     else
     {
-        gfx_draw_all_things();
+        gfx_draw_all_entities();
     }
 }
 

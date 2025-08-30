@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define ENTITY_DEF_NAME_MAX_LEN (16)
+
 typedef enum ThingFlags
 {
     THING_FLAGS_NONE = 0x00,
@@ -26,11 +28,11 @@ typedef enum CollisionFlags
     COLL_FLAGS_CALLBACK = 0x10,
 } CollisionFlags_t;
 
-typedef struct Prefab
+typedef struct EntityDefinition
 {
-    char name[16];
+    char name[ENTITY_DEF_NAME_MAX_LEN];
     ThingFlags_t flags;
-} Prefab_t;
+} EntityDefinition_t;
 
 typedef struct Sprite
 {
@@ -75,13 +77,25 @@ typedef struct MoveTriggerScene
     int32_t index;
 } MoveTriggerScene_t;
 
-typedef struct Thing
+typedef struct EntityStored
+{
+    char definition_name[ENTITY_DEF_NAME_MAX_LEN];
+    uint8_t layer;
+    Transform_t transform;
+} EntityStored_t;
+
+typedef struct EntityLive
 {
     bool used;
+    uint16_t definition_idx;
     uint8_t layer;
-    uint16_t prefab_idx;
     Transform_t transform;
-} Thing_t;
+} EntityLive_t;
+
+EntityDefinition_t* thing_get_definition(EntityLive_t *thing);
+Sprite_t* entity_get_sprite(EntityLive_t *thing);
+Collider_t* thing_get_collider(EntityLive_t *thing);
+SoundEmitter_t* entity_get_sounds(EntityLive_t *thing);
 
 #endif
 
