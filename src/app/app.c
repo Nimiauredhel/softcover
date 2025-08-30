@@ -77,8 +77,8 @@ static void things_update_draw_order(void);
 static void things_get_distance(uint16_t first_thing_id, uint16_t second_thing_id, int32_t *x_dist_out, int32_t *y_dist_out);
 static uint16_t thing_test_collision(uint16_t thing_id);
 static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta);
-static int32_t thing_create(uint8_t prefab, uint8_t layer, uint16_t x, uint16_t y);
-static void thing_set_pos(uint32_t thing_id, int16_t x, int16_t y);
+static int32_t thing_create(uint16_t prefab_id, uint8_t layer, int32_t x, int32_t y);
+static void thing_set_pos(uint32_t thing_id, int32_t x, int32_t y);
 /*
 static void thing_set_texture(uint32_t thing_id, uint32_t texture_id, int16_t x_offset, int16_t y_offset, int16_t coll_width, int16_t coll_height);
 static void thing_set_move_sfx(uint32_t thing_id, uint32_t sfx_id);
@@ -372,6 +372,32 @@ static int32_t prefab_get_idx_by_name(char *name)
     return -1;
 }
 
+static int32_t prefab_clone(int32_t src_idx, char *clone_name)
+{
+    if (ephemerals->prefabs_count >= APP_PREFABS_MAX_COUNT)
+    {
+        platform->debug_log("Cannot clone prefab: limit reached.");
+        return -1;
+    } 
+    else if (src_idx < 0 || src_idx >= APP_PREFABS_MAX_COUNT)
+    {
+        platform->debug_log("Cannot clone prefab: invalid source index.");
+        return -1;
+    }    
+
+    int32_t dst_idx = ephemerals->prefabs_count;
+    ephemerals->prefabs_count++;
+
+    /// ISSUE: this currently needs to be updated every time a new component is added
+    memcpy(ephemerals->prefabs+dst_idx, ephemerals->prefabs+src_idx, sizeof(Prefab_t));
+    memcpy(ephemerals->sprites+dst_idx, ephemerals->sprites+src_idx, sizeof(Sprite_t));
+    memcpy(ephemerals->colliders+dst_idx, ephemerals->colliders+src_idx, sizeof(Collider_t));
+    memcpy(ephemerals->sound_emitters+dst_idx, ephemerals->sound_emitters+src_idx, sizeof(SoundEmitter_t));
+    strncpy(ephemerals->prefabs[dst_idx].name, clone_name, sizeof(ephemerals->prefabs[dst_idx].name));
+
+    return dst_idx;
+}
+
 static void load_scene_by_path(char *path)
 {
     bzero(ephemerals->scratch, APP_SCRATCH_SIZE);
@@ -423,6 +449,36 @@ static void load_scene_by_path(char *path)
                     value = strtok(NULL, " ");
                     y_pos = atoi(value);
                     thing_create(prefab_index, layer_index, x_pos, y_pos);
+                }
+                else if (strcmp(token, "VARIANT") == 0)
+                {
+                    /// scene file is specifying and naming a variant of the selected prefab.
+                    /// if a prefab with the requested name was already created, use it.
+                    int32_t src_idx = prefab_index;
+                    prefab_index = prefab_get_idx_by_name(value);
+                    /// else, clone the base prefab.
+                    if (prefab_index < 0)
+                    {
+                        prefab_index = prefab_clone(src_idx, value);
+                    }
+                }
+                else if (strcmp(token, "COLLISION_SET_SCENE") == 0)
+                {
+                    ephemerals->colliders[prefab_index].flags |= COLL_FLAGS_SET_SCENE;
+                    ephemerals->colliders[prefab_index].params[1] = atoi(value);
+                }
+                else if (strcmp(token, "COLLISION_SET_POSITION") == 0)
+                {
+                    ephemerals->colliders[prefab_index].flags |= COLL_FLAGS_SET_POSITION;
+                    value = strtok(value, " ");
+                    ephemerals->colliders[prefab_index].params[2] = atoi(value);
+                    value = strtok(NULL, " ");
+                    ephemerals->colliders[prefab_index].params[3] = atoi(value);
+                }
+                else if (strcmp(token, "COLLISION_CALLBACK") == 0)
+                {
+                    ephemerals->colliders[prefab_index].flags |= COLL_FLAGS_CALLBACK;
+                    ephemerals->colliders[prefab_index].params[4] = atoi(value);
                 }
                 else
                 {
@@ -528,7 +584,7 @@ static void audio_push_clip(AudioClip_t *clip)
     audio_push_samples(clip->samples, clip->num_samples, clip->num_channels);
 }
 
-static int32_t thing_create(uint8_t prefab, uint8_t layer, uint16_t x, uint16_t y)
+static int32_t thing_create(uint16_t prefab_id, uint8_t layer, int32_t x, int32_t y)
 {
     uint16_t index = serializables->scenes[serializables->scene_index].things_count;
 
@@ -544,18 +600,19 @@ static int32_t thing_create(uint8_t prefab, uint8_t layer, uint16_t x, uint16_t 
 
     thing->used = true;
     thing->layer = layer;
-    thing->prefab_idx = prefab;
+    thing->prefab_idx = prefab_id;
 
     thing->transform.x_pos = x;
     thing->transform.y_pos = y;
 
-    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Created new %u-Thing at index %u, [%u,%u] layer %u.", prefab, index, x, y, layer);
+    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Created new %s[%u] at index %u, [%u,%u] layer %u.",
+            ephemerals->prefabs[prefab_id].name, prefab_id, index, x, y, layer);
     platform->debug_log(ephemerals->debug_buff);
 
     return index;
 }
 
-static void thing_set_pos(uint32_t thing_id, int16_t x, int16_t y)
+static void thing_set_pos(uint32_t thing_id, int32_t x, int32_t y)
 {
     serializables->scenes[serializables->scene_index].things[thing_id].transform.x_pos = x;
     serializables->scenes[serializables->scene_index].things[thing_id].transform.y_pos = y;
