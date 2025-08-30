@@ -28,6 +28,7 @@ typedef enum CollisionFlags
 
 typedef struct Prefab
 {
+    char name[16];
     ThingFlags_t flags;
 } Prefab_t;
 

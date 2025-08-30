@@ -1,110 +1,91 @@
-### character 1 ###
-# prefab index
-0
-# repetition count
-1
-# layer index
-5
-# x / y per repetition
-24 8
-### character 2 ###
-# prefab index
-1
-# repetition count
-1
-# layer index
-5
-# x / y per repetition
-48 8
-### pillars ###
-# prefab index
-2
-# repetition count
-7
-# layer index
-5
-# x / y per repetition
-5 5
-23 5
-39 5
-55 5
-71 5
-88 5
-104 5
-### back wall tiles ###
-# prefab index
-3
-# repetition count
-16
-# layer index
-0
-# x / y per repetition
-0 0
-8 0
-16 0
-24 0
-32 0
-40 0
-48 0
-56 0
-64 0
-72 0
-80 0
-88 0
-96 0
-104 0
-112 0
-120 0
-### floor tiles ###
-# prefab index
-4
-# repetition count
-36
-# layer index
-0
-# x / y per repetition
-0   5
-8   5
-16  5
-24  5
-32  5
-40  5
-48  5
-56  5
-64  5
-72  5
-80  5
-88  5
-0   13
-8   13
-16  13
-24  13
-32  13
-40  13
-48  13
-56  13
-64  13
-72  13
-80  13
-88  13
-0   21
-8   21
-16  21
-24  21
-32  21
-40  21
-48  21
-56  21
-64  21
-72  21
-80  21
-88  21
-### door to 1 ###
-# prefab index
-6
-# repetition count
-1
-# layer index
-5
-# x / y per repetition
-0 24
+PREFAB=character1
+LAYER=5
+
+INSTANCE_AT=24 8
+
+
+PREFAB=character2
+LAYER=5
+
+INSTANCE_AT=48 8
+
+
+PREFAB=pillar
+LAYER=5
+
+INSTANCE_AT=5 5
+INSTANCE_AT=23 5
+INSTANCE_AT=39 5
+INSTANCE_AT=55 5
+INSTANCE_AT=71 5
+INSTANCE_AT=88 5
+INSTANCE_AT=104 5
+
+
+PREFAB=back_wall_tile
+LAYER=0
+
+INSTANCE_AT=0 0
+INSTANCE_AT=8 0
+INSTANCE_AT=16 0
+INSTANCE_AT=24 0
+INSTANCE_AT=32 0
+INSTANCE_AT=40 0
+INSTANCE_AT=48 0
+INSTANCE_AT=56 0
+INSTANCE_AT=64 0
+INSTANCE_AT=72 0
+INSTANCE_AT=80 0
+INSTANCE_AT=88 0
+INSTANCE_AT=96 0
+INSTANCE_AT=104 0
+INSTANCE_AT=112 0
+INSTANCE_AT=120 0
+
+
+PREFAB=floor_tile
+LAYER=0
+
+INSTANCE_AT=0 5
+INSTANCE_AT=8 5
+INSTANCE_AT=16 5
+INSTANCE_AT=24 5
+INSTANCE_AT=32 5
+INSTANCE_AT=40 5
+INSTANCE_AT=48 5
+INSTANCE_AT=56 5
+INSTANCE_AT=64 5
+INSTANCE_AT=72 5
+INSTANCE_AT=80 5
+INSTANCE_AT=88 5
+
+INSTANCE_AT=0  13
+INSTANCE_AT=8  13
+INSTANCE_AT=16 13
+INSTANCE_AT=24 13
+INSTANCE_AT=32 13
+INSTANCE_AT=40 13
+INSTANCE_AT=48 13
+INSTANCE_AT=56 13
+INSTANCE_AT=64 13
+INSTANCE_AT=72 13
+INSTANCE_AT=80 13
+INSTANCE_AT=88 13
+
+INSTANCE_AT=0  21
+INSTANCE_AT=8  21
+INSTANCE_AT=16 21
+INSTANCE_AT=24 21
+INSTANCE_AT=32 21
+INSTANCE_AT=40 21
+INSTANCE_AT=48 21
+INSTANCE_AT=56 21
+INSTANCE_AT=64 21
+INSTANCE_AT=72 21
+INSTANCE_AT=80 21
+INSTANCE_AT=88 21
+
+
+PREFAB=door_to_1
+LAYER=5
+INSTANCE_AT=0 24

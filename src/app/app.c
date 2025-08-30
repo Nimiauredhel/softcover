@@ -244,8 +244,6 @@ static void load_prefabs_all(void)
 
         uint32_t line_num = 0;
         int32_t current_idx = -1;
-        ThingFlags_t current_flags = 0;
-        uint8_t state = 0; // 0 flags, 1 texture id & offsets, 2 coll bounds, 3 coll flags, 4 sfx
         char *token = NULL;
         char *value = NULL;
 
@@ -268,6 +266,8 @@ static void load_prefabs_all(void)
                     ephemerals->prefabs_count++;
                     /// reset flags
                     ephemerals->prefabs[current_idx].flags = THING_FLAGS_NONE;
+                    /// copy prefab name
+                    strncpy(ephemerals->prefabs[current_idx].name, value, sizeof(ephemerals->prefabs[current_idx].name)-1);
                 }
                 else if (current_idx < 0)
                 {
@@ -329,8 +329,9 @@ static void load_prefabs_all(void)
                 {
                     ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
                     ephemerals->colliders[current_idx].flags |= COLL_FLAGS_SET_POSITION;
-                    ephemerals->colliders[current_idx].params[2] = atoi(value);
                     value = strtok(value, " ");
+                    ephemerals->colliders[current_idx].params[2] = atoi(value);
+                    value = strtok(NULL, " ");
                     ephemerals->colliders[current_idx].params[3] = atoi(value);
                 }
                 else if (strcmp(token, "COLLISION_CALLBACK") == 0)
@@ -352,9 +353,23 @@ static void load_prefabs_all(void)
                 }
             }
 
+            line_num++;
             current_line = next_line ? next_line + 1 : NULL;
         }
     }
+}
+
+static int32_t prefab_get_idx_by_name(char *name)
+{
+    for (uint16_t i = 0; i < ephemerals->prefabs_count; i++)
+    {
+        if (strcmp(name, ephemerals->prefabs[i].name) == 0)
+        {
+            return i;
+        }
+    }
+
+    return -1;
 }
 
 static void load_scene_by_path(char *path)
@@ -367,12 +382,11 @@ static void load_scene_by_path(char *path)
         char *current_line = (char *)ephemerals->scratch;
         char *next_line = NULL;
 
-        uint8_t state = 0; // 0 prefab, 1 repetition, 2 layer, 3 x y per rep
         char *token = NULL;
+        char *value = NULL;
 
-        uint16_t prefab_index = 0;
-        uint16_t rep_target = 0;
-        uint16_t rep_counter = 0;
+        uint32_t line_num = 0;
+        int32_t prefab_index = -1;
         uint16_t layer_index = 0;
         uint16_t x_pos = 0;
         uint16_t y_pos = 0;
@@ -385,47 +399,40 @@ static void load_scene_by_path(char *path)
             if (strlen(current_line) > 0
                 && current_line[0] != '#')
             {
-                switch (state)
+                token = strtok(current_line, "=");
+                value = strtok(NULL, "=");
+
+                if (strcmp(token, "PREFAB") == 0)
                 {
-                    case 0:
-                        /// set prefab idx according to line
-                        prefab_index = atoi(current_line);
-                        /// set state to read reps next
-                        state = 1;
-                        break;
-                    case 1:
-                        /// set rep target accoring to line
-                        rep_target = atoi(current_line);
-                        rep_counter = 0;
-                        /// set state to read layer next
-                        state = rep_target > 0 ? 2 : 0;
-                        break;
-                    case 2:
-                        /// set layer according to line
-                        layer_index = atoi(current_line);
-                        /// set state to read next prefab texture idx next
-                        state = 3;
-                        break;
-                    case 3:
-                        /// split line between x y according to delimiter
-                        token = strtok(current_line, " ");
-                        x_pos = atoi(token);
-                        token = strtok(NULL, " ");
-                        y_pos = atoi(token);
-                        thing_create(prefab_index, layer_index, x_pos, y_pos);
-
-                        rep_counter++;
-
-                        if (rep_counter >= rep_target)
-                        {
-                            /// set state to read next group of things
-                            state = 0;
-                            token = NULL;
-                        }
-                        break;
+                    prefab_index = prefab_get_idx_by_name(value);
+                }
+                else if (prefab_index < 0)
+                {
+                    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff),
+                            "Out of sequence entry (%s:%u): [%s].", path, line_num, current_line); 
+                    platform->debug_log(ephemerals->debug_buff);
+                }
+                else if (strcmp(token, "LAYER") == 0)
+                {
+                    layer_index = atoi(value);
+                }
+                else if (strcmp(token, "INSTANCE_AT") == 0)
+                {
+                    value = strtok(value, " ");
+                    x_pos = atoi(value);
+                    value = strtok(NULL, " ");
+                    y_pos = atoi(value);
+                    thing_create(prefab_index, layer_index, x_pos, y_pos);
+                }
+                else
+                {
+                    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff),
+                            "Unknown entry (%s:%u): [%s].", path, line_num, current_line); 
+                    platform->debug_log(ephemerals->debug_buff);
                 }
             }
 
+            line_num++;
             current_line = next_line ? next_line + 1 : NULL;
         }
 
