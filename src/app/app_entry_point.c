@@ -561,7 +561,7 @@ static void entity_set_pos(uint32_t entity_id, int32_t x, int32_t y)
     serializables->scenes[serializables->scene_index].entities[entity_id].transform.x_pos = x;
     serializables->scenes[serializables->scene_index].entities[entity_id].transform.y_pos = y;
 
-    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Set Thing %u at position [%u,%u].", entity_id, x, y);
+    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Set Thing %u at position [%d,%d].", entity_id, x, y);
     platform->debug_log(ephemerals->debug_buff);
 }
 

@@ -92,10 +92,10 @@ typedef struct EntityLive
     Transform_t transform;
 } EntityLive_t;
 
-EntityDefinition_t* thing_get_definition(EntityLive_t *thing);
-Sprite_t* entity_get_sprite(EntityLive_t *thing);
-Collider_t* thing_get_collider(EntityLive_t *thing);
-SoundEmitter_t* entity_get_sounds(EntityLive_t *thing);
+EntityDefinition_t* entity_get_definition(EntityLive_t *entity);
+Sprite_t* entity_get_sprite(EntityLive_t *entity);
+Collider_t* entity_get_collider(EntityLive_t *entity);
+SoundEmitter_t* entity_get_sounds(EntityLive_t *entity);
 
 #endif
 
