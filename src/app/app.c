@@ -163,6 +163,7 @@ static void input_process_all(void)
 static size_t load_texture_to_memory(char *name)
 {
     size_t index = ephemerals->bump_used;
+    size_t remaining = sizeof(ephemerals->bump_buffer) - index;
     Texture_t *texture_ptr = (Texture_t *)(ephemerals->bump_buffer+index);
 
     snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff),
@@ -170,7 +171,10 @@ static size_t load_texture_to_memory(char *name)
             name, index, (void *)texture_ptr);
     platform->debug_log(ephemerals->debug_buff);
 
-    platform->gfx_load_texture(name, texture_ptr);
+    bool success = platform->gfx_load_texture(name, texture_ptr, remaining);
+
+    if (!success) return -1;
+
     size_t size = sizeof(Texture_t) + (texture_ptr->height * texture_ptr->width * texture_ptr->pixel_size_bytes);
     ephemerals->bump_used += size;
 
@@ -183,12 +187,15 @@ static size_t load_texture_to_memory(char *name)
 static size_t load_wav_to_memory(char *name)
 {
     size_t index = ephemerals->bump_used;
+    size_t remaining = sizeof(ephemerals->bump_buffer) - index;
     AudioClip_t *clip_ptr = (AudioClip_t *)(ephemerals->bump_buffer+index);
 
     snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Loading wav '%s' to scratch memory at offset %lu.", name, index);
     platform->debug_log(ephemerals->debug_buff);
 
-    platform->audio_load_wav(name, clip_ptr);
+    bool success = platform->audio_load_wav(name, clip_ptr, remaining);
+
+    if (!success) return -1;
 
     /// TODO: finish implementing trim_silence
     /*
@@ -223,8 +230,10 @@ static size_t load_wav_to_memory(char *name)
 
 static void load_prefabs_all(void)
 {
+    static const char *filename = "prefabs.soft";
+
     bzero(ephemerals->scratch, APP_SCRATCH_SIZE);
-    size_t txt_len = platform->storage_load_text("prefabs.soft", (char *)ephemerals->scratch, APP_SCRATCH_SIZE);
+    size_t txt_len = platform->storage_load_text(filename, (char *)ephemerals->scratch, APP_SCRATCH_SIZE);
 
     if (txt_len > 0)
     {
@@ -233,10 +242,12 @@ static void load_prefabs_all(void)
         char *current_line = (char *)ephemerals->scratch;
         char *next_line = NULL;
 
-        uint16_t current_idx = 0;
+        uint32_t line_num = 0;
+        int32_t current_idx = -1;
         ThingFlags_t current_flags = 0;
         uint8_t state = 0; // 0 flags, 1 texture id & offsets, 2 coll bounds, 3 coll flags, 4 sfx
         char *token = NULL;
+        char *value = NULL;
 
         while (current_line != NULL && ephemerals->textures_count < APP_SOUNDS_MAX_COUNT)
         {
@@ -246,67 +257,98 @@ static void load_prefabs_all(void)
             if (strlen(current_line) > 0
                 && current_line[0] != '#')
             {
-                switch (state)
-                {
-                    case 0:
-                        /// base prefab idx on prefab count
-                        current_idx = ephemerals->prefabs_count;
-                        /// increment prefab count
-                        ephemerals->prefabs_count++;
-                        // read flags from line and decide next state
-                        current_flags = atoi(current_line);
-                        ephemerals->prefabs[current_idx].flags = current_flags;
-                        state = current_flags & THING_FLAGS_TEXTURE ? 1
-                              : current_flags & THING_FLAGS_COLLISION ? 2
-                              : current_flags & THING_FLAGS_SOUND ? 4
-                              : 0;
-                        break;
-                    case 1:
-                        /// split line between id, x & y according to delimiter
-                        /// and set texture id & offsets accordingly
-                        token = strtok(current_line, " ");
-                        ephemerals->sprites[current_idx].texture_idx = atoi(token);
-                        token = strtok(NULL, " ");
-                        ephemerals->sprites[current_idx].x_offset = atoi(token);
-                        token = strtok(NULL, " ");
-                        ephemerals->sprites[current_idx].y_offset = atoi(token);
-                        /// set next state according to flags
-                        state = current_flags & THING_FLAGS_COLLISION ? 2
-                              : current_flags & THING_FLAGS_SOUND ? 4
-                              : 0;
-                        break;
-                    case 2:
-                        /// split line between min x / min y / max x / max y, according to delimiter
-                        token = strtok(current_line, " ");
-                        ephemerals->colliders[current_idx].min_x = atoi(token);
-                        token = strtok(NULL, " ");
-                        ephemerals->colliders[current_idx].min_y = atoi(token);
-                        token = strtok(NULL, " ");
-                        ephemerals->colliders[current_idx].max_x = atoi(token);
-                        token = strtok(NULL, " ");
-                        ephemerals->colliders[current_idx].max_y = atoi(token);
+                token = strtok(current_line, "=");
+                value = strtok(NULL, "=");
 
-                        state = 3;
-                        break;
-                    case 3:
-                        /// split line between flags + 5 params, according to delimiter
-                        token = strtok(current_line, " ");
-                        ephemerals->colliders[current_idx].flags = atoi(token);
-                        for (uint8_t i = 0; i < 5; i++)
-                        {
-                            token = strtok(NULL, " ");
-                            ephemerals->colliders[current_idx].params[i] = atoi(token);
-                        }
-                        /// set next state according to flags
-                        state = current_flags & THING_FLAGS_SOUND ? 4
-                              : 0;
-                        break;
-                    case 4:
-                        /// set prefab move sfx idx accoring to line
-                        ephemerals->sound_emitters[current_idx].move_sfx_idx = atoi(current_line);
-                        /// set state to read offsets next
-                        state = 0;
-                        break;
+                if (strcmp(token, "PREFAB") == 0)
+                {
+                    /// base prefab idx on prefab count
+                    current_idx = ephemerals->prefabs_count;
+                    /// increment prefab count
+                    ephemerals->prefabs_count++;
+                    /// reset flags
+                    ephemerals->prefabs[current_idx].flags = THING_FLAGS_NONE;
+                }
+                else if (current_idx < 0)
+                {
+                    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff),
+                            "Out of sequence entry (%s:%u): [%s].", filename, line_num, current_line); 
+                    platform->debug_log(ephemerals->debug_buff);
+                }
+                else if (strcmp(token, "TEXTURE_ID") == 0)
+                {
+                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_TEXTURE;
+                    ephemerals->sprites[current_idx].texture_idx = atoi(value);
+                }
+                else if (strcmp(token, "TEXTURE_OFFSET_X") == 0)
+                {
+                    ephemerals->sprites[current_idx].x_offset = atoi(value);
+                }
+                else if (strcmp(token, "TEXTURE_OFFSET_Y") == 0)
+                {
+                    ephemerals->sprites[current_idx].y_offset = atoi(value);
+                }
+                else if (strcmp(token, "COLLISION_MIN_X") == 0)
+                {
+                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->colliders[current_idx].min_x = atoi(value);
+                }
+                else if (strcmp(token, "COLLISION_MIN_Y") == 0)
+                {
+                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->colliders[current_idx].min_y = atoi(value);
+                }
+                else if (strcmp(token, "COLLISION_MAX_X") == 0)
+                {
+                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->colliders[current_idx].max_x = atoi(value);
+                }
+                else if (strcmp(token, "COLLISION_MAX_Y") == 0)
+                {
+                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->colliders[current_idx].max_y = atoi(value);
+                }
+                else if (strcmp(token, "COLLISION_BLOCK") == 0)
+                {
+                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->colliders[current_idx].flags |= COLL_FLAGS_BLOCK;
+                }
+                else if (strcmp(token, "COLLISION_SOUND") == 0)
+                {
+                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->colliders[current_idx].flags |= COLL_FLAGS_PLAY_SOUND;
+                    ephemerals->colliders[current_idx].params[0] = atoi(value);
+                }
+                else if (strcmp(token, "COLLISION_SET_SCENE") == 0)
+                {
+                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->colliders[current_idx].flags |= COLL_FLAGS_SET_SCENE;
+                    ephemerals->colliders[current_idx].params[1] = atoi(value);
+                }
+                else if (strcmp(token, "COLLISION_SET_POSITION") == 0)
+                {
+                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->colliders[current_idx].flags |= COLL_FLAGS_SET_POSITION;
+                    ephemerals->colliders[current_idx].params[2] = atoi(value);
+                    value = strtok(value, " ");
+                    ephemerals->colliders[current_idx].params[3] = atoi(value);
+                }
+                else if (strcmp(token, "COLLISION_CALLBACK") == 0)
+                {
+                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_COLLISION;
+                    ephemerals->colliders[current_idx].flags |= COLL_FLAGS_CALLBACK;
+                    ephemerals->colliders[current_idx].params[4] = atoi(value);
+                }
+                else if (strcmp(token, "MOVE_SOUND") == 0)
+                {
+                    ephemerals->prefabs[current_idx].flags |= THING_FLAGS_SOUND;
+                    ephemerals->sound_emitters[current_idx].move_sfx_idx = atoi(value);
+                }
+                else
+                {
+                    snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff),
+                            "Unknown entry (%s:%u): [%s].", filename, line_num, current_line); 
+                    platform->debug_log(ephemerals->debug_buff);
                 }
             }
 
@@ -511,10 +553,8 @@ static void thing_set_pos(uint32_t thing_id, int16_t x, int16_t y)
     serializables->scenes[serializables->scene_index].things[thing_id].transform.x_pos = x;
     serializables->scenes[serializables->scene_index].things[thing_id].transform.y_pos = y;
 
-    /*
     snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Set Thing %u at position [%u,%u].", thing_id, x, y);
     platform->debug_log(ephemerals->debug_buff);
-    */
 }
 
 /*
@@ -743,10 +783,6 @@ static uint16_t thing_test_collision(uint16_t thing_id)
     return thing_id;
 }
 
-static void collision_process(uint16_t thing_idx, uint16_t other_idx)
-{
-}
-
 static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta)
 {
     Scene_t *scene = &serializables->scenes[serializables->scene_index];
@@ -768,34 +804,34 @@ static void thing_move(uint16_t thing_idx, int16_t x_delta, int16_t y_delta)
     COLL_FLAGS_SET_POSITION = 0x08,
     COLL_FLAGS_CALLBACK = 0x10,
     */
-        Collider_t * other_coll = &ephemerals->colliders[scene->things[other_idx].prefab_idx];
+        /// intentional copy to survive a potential possible scene transition
+        /// TODO: make this hack unnecessary
+        Collider_t other_coll_copy = ephemerals->colliders[scene->things[other_idx].prefab_idx];
 
-        if (other_coll->flags & COLL_FLAGS_BLOCK)
+        if (other_coll_copy.flags & COLL_FLAGS_BLOCK)
         {
-            scene->things[thing_idx].transform.x_pos -= x_delta;
-            scene->things[thing_idx].transform.y_pos -= y_delta;
+            thing_set_pos(thing_idx, scene->things[thing_idx].transform.x_pos - x_delta, scene->things[thing_idx].transform.y_pos - y_delta);
         }
 
-        if (other_coll->flags & COLL_FLAGS_PLAY_SOUND)
+        if (other_coll_copy.flags & COLL_FLAGS_PLAY_SOUND)
         {
-            audio_push_clip((AudioClip_t *)(ephemerals->bump_buffer+ephemerals->sound_offsets[other_coll->params[0]]));
+            audio_push_clip((AudioClip_t *)(ephemerals->bump_buffer+ephemerals->sound_offsets[other_coll_copy.params[0]]));
         }
 
-        if ((other_coll->flags & COLL_FLAGS_SET_SCENE)
+        if ((other_coll_copy.flags & COLL_FLAGS_SET_SCENE)
             && thing_idx == serializables->controlled_thing_idx)
         {
-            load_scene_by_index(other_coll->params[1]);
+            load_scene_by_index(other_coll_copy.params[1]);
             /// TODO: this is obviously a bad way to do it and needs to go later
-            //thing_idx = serializables->controlled_thing_idx;
+            serializables->controlled_thing_idx = thing_idx;
         }
 
-        if (other_coll->flags & COLL_FLAGS_SET_POSITION)
+        if (other_coll_copy.flags & COLL_FLAGS_SET_POSITION)
         {
-            scene->things[thing_idx].transform.x_pos = other_coll->params[2];
-            scene->things[thing_idx].transform.x_pos = other_coll->params[3];
+            thing_set_pos(thing_idx, other_coll_copy.params[2], other_coll_copy.params[3]);
         }
 
-        if (other_coll->flags & COLL_FLAGS_CALLBACK)
+        if (other_coll_copy.flags & COLL_FLAGS_CALLBACK)
         {
             /// TODO: add collision callback array
         }

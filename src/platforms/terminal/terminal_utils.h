@@ -16,7 +16,7 @@ void initialize_random_seed(void);
 void signal_handler(int signum);
 int random_range(int min, int max);
 size_t storage_load_text(const char *name, char *dest, size_t max_len);
-void gfx_load_texture(char *name, Texture_t *dest);
-bool audio_load_wav(char *name, AudioClip_t *dest);
+bool gfx_load_texture(char *name, Texture_t *dest, size_t max_size);
+bool audio_load_wav(char *name, AudioClip_t *dest, size_t max_size);
 
 #endif

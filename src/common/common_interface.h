@@ -65,8 +65,8 @@ struct Platform
     float (*audio_get_volume)(void);
     void (*audio_set_volume)(float);
     // storage
-    void (*gfx_load_texture)(char *name, Texture_t *dest);
-    bool (*audio_load_wav)(char *name, AudioClip_t *dest);
+    bool (*gfx_load_texture)(char *name, Texture_t *dest, size_t max_size);
+    bool (*audio_load_wav)(char *name, AudioClip_t *dest, size_t max_size);
     size_t (*storage_load_text)(const char *name, char *dest, size_t max_len);
     void (*storage_save_state)(char *state_name);
     void (*storage_load_state)(char *state_name);

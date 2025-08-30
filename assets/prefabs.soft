@@ -1,73 +1,65 @@
-#####
-## PREFAB FLAGS: ##
-## 0 NONE
-## 1 TRANSFORM
-## 2 TEXTURE
-## 4 COLLISION
-## 8 MOVEMENT
-## 16 CONTROL
-## 32 SOUND
-#####
-## COLLISION FLAGS: ##
-## 0 NONE
-## 1 BLOCK
-## 2 PLAY SOUND
-## 4 SET SCENE
-## 8 SET POSITION
-## 16 CALLBACK INDEX
-#####
-### character 1 ###
-# flags
-63
-# texture id & offsets
-0 3 6
-# collision bounds
-# (min x, min y, max x, max y)
--1 1 1 1
-# collision flags & params
-# (just block, all params zero)
-1 0 0 0 0 0
-# move sfx idx
-0
-####
-### character 2 ###
-# flags
-63
-# texture id & offsets
-1 3 6
-# coll
--1 1 1 1
-# collision flags & params
-# (just block, all params zero)
-1 0 0 0 0 0
-# move sfx idx
-1
-####
-### pillar ###
-# flags
-7
-# texture id & offsets
-2 6 3
-# coll
--6 -2 6 1
-# collision flags & params
-# (just block, all params zero)
-1 0 0 0 0 0
-# move sfx idx omitted
-####
-### back wall tile ###
-# flags
-3
-# texture id & offsets
-3 0 0
-# coll omitted
-# move sfx idx omitted
-####
-### floor tile ###
-# flags
-3
-# texture id & offsets
-4 0 0
-# coll omitted
-# move sfx idx omitted
-####
+PREFAB=character1
+TEXTURE_ID=0
+TEXTURE_OFFSET_X=3
+TEXTURE_OFFSET_Y=6
+COLLISION_MIN_X=-1
+COLLISION_MIN_Y=-1
+COLLISION_MAX_X=1
+COLLISION_MAX_Y=1
+COLLISION_BLOCK=true
+MOVE_SOUND=0
+
+PREFAB=character2
+TEXTURE_ID=1
+TEXTURE_OFFSET_X=3
+TEXTURE_OFFSET_Y=6
+COLLISION_MIN_X=-1
+COLLISION_MIN_Y=-1
+COLLISION_MAX_X=1
+COLLISION_MAX_Y=1
+COLLISION_BLOCK=true
+MOVE_SOUND=1
+
+PREFAB=pillar
+TEXTURE_ID=2
+TEXTURE_OFFSET_X=6
+TEXTURE_OFFSET_Y=3
+COLLISION_MIN_X=-6
+COLLISION_MIN_Y=-2
+COLLISION_MAX_X=6
+COLLISION_MAX_Y=1
+COLLISION_BLOCK=true
+
+PREFAB=back_wall_tile
+TEXTURE_ID=3
+TEXTURE_OFFSET_X=0
+TEXTURE_OFFSET_Y=0
+
+PREFAB=floor_tile
+TEXTURE_ID=4
+TEXTURE_OFFSET_X=0
+TEXTURE_OFFSET_Y=0
+
+PREFAB=door_to_0
+TEXTURE_ID=5
+TEXTURE_OFFSET_X=5
+TEXTURE_OFFSET_Y=6
+COLLISION_MIN_X=-3
+COLLISION_MIN_Y=-2
+COLLISION_MAX_X=4
+COLLISION_MAX_Y=0
+COLLISION_BLOCK=true
+COLLISION_SET_SCENE=0
+COLLISION_SET_POSITION=24 24
+lets see what happens now
+PREFAB=door_to_1
+TEXTURE_ID=5
+TEXTURE_OFFSET_X=5
+TEXTURE_OFFSET_Y=6
+COLLISION_MIN_X=-3
+COLLISION_MIN_Y=-2
+COLLISION_MAX_X=4
+COLLISION_MAX_Y=0
+COLLISION_BLOCK=true
+COLLISION_SET_SCENE=1
+COLLISION_SET_POSITION=24 24

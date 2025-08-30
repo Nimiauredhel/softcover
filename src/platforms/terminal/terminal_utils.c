@@ -126,7 +126,7 @@ size_t storage_load_text(const char *name, char *dest, size_t max_len)
     return read;
 }
 
-void gfx_load_texture(char *name, Texture_t *dest)
+bool gfx_load_texture(char *name, Texture_t *dest, size_t max_size)
 {
     static char debug_buff[DEBUG_MESSAGE_MAX_LEN] = {0};
 
@@ -139,36 +139,51 @@ void gfx_load_texture(char *name, Texture_t *dest)
 
     uint32_t ret = loadbmp_decode_file(name, &temp_buff, &width, &height, LOADBMP_RGB);
 
-    size_t dst_size = width * height * dst_pixel_size_bytes;
-
     if (ret != 0)
     {
         snprintf(debug_buff, sizeof(debug_buff), "Error code %d while loading %s (%dx%dx%d).",
             ret, name, dest->width, dest->height, dest->pixel_size_bytes);
         debug_log(debug_buff);
+        return false;
     }
 
-    if (temp_buff != NULL)
+    if (temp_buff == NULL)
     {
-        dest->width = width;
-        dest->height = height;
-        dest->pixel_size_bytes = dst_pixel_size_bytes;
-
-        for (uint16_t pixel = 0; pixel < dst_size; pixel++)
-        {
-            uint16_t src_pixel = pixel * 3;
-            dest->pixels[pixel] = gfx_rgb_to_color_pair(temp_buff[src_pixel], temp_buff[src_pixel+1], temp_buff[src_pixel+2]);
-        }
-
-        free(temp_buff);
-
-        snprintf(debug_buff, sizeof(debug_buff), "Loaded %s (%dx%dx%d).",
+        snprintf(debug_buff, sizeof(debug_buff), "Null buff pointer while loading %s (%dx%dx%d).",
             name, dest->width, dest->height, dest->pixel_size_bytes);
         debug_log(debug_buff);
+        return false;
     }
+
+    size_t dst_size = width * height * dst_pixel_size_bytes;
+
+    if (dst_size > max_size)
+    {
+        snprintf(debug_buff, sizeof(debug_buff), "Requestd texture '%s' requires %lu bytes exceeding limit of %lu.", name, dst_size, max_size);
+        debug_log(debug_buff);
+        free(temp_buff);
+        return false;
+    }
+
+    dest->width = width;
+    dest->height = height;
+    dest->pixel_size_bytes = dst_pixel_size_bytes;
+
+    for (uint16_t pixel = 0; pixel < dst_size; pixel++)
+    {
+        uint16_t src_pixel = pixel * 3;
+        dest->pixels[pixel] = gfx_rgb_to_color_pair(temp_buff[src_pixel], temp_buff[src_pixel+1], temp_buff[src_pixel+2]);
+    }
+
+    free(temp_buff);
+
+    snprintf(debug_buff, sizeof(debug_buff), "Loaded %s (%dx%dx%d).",
+        name, dest->width, dest->height, dest->pixel_size_bytes);
+    debug_log(debug_buff);
+    return true;
 }
 
-bool audio_load_wav(char *name, AudioClip_t *dest)
+bool audio_load_wav(char *name, AudioClip_t *dest, size_t max_size)
 {
 #define BLOCK_SIZE (256)
 
@@ -187,6 +202,14 @@ bool audio_load_wav(char *name, AudioClip_t *dest)
     uint8_t num_channels = tw.h.NumChannels;
     uint32_t num_samples = tw.h.Subchunk2Size / num_channels * tw.h.BitsPerSample / 8;
     size_t clip_size = sizeof(AudioClip_t) + ((sizeof(float) * num_samples));
+
+    if (clip_size > max_size)
+    {
+        snprintf(debug_buff, sizeof(debug_buff), "Requestd WAV file '%s' is of size %lu exceeding limit of %lu.", name, clip_size, max_size);
+        debug_log(debug_buff);
+        tinywav_close_read(&tw);
+        return false;
+    }
 
     snprintf(debug_buff, sizeof(debug_buff), "Loading WAV file '%s', channels: %u,  size: %lu bytes.", name, num_channels, clip_size);
     debug_log(debug_buff);

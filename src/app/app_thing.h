@@ -61,6 +61,19 @@ typedef struct Transform
     int16_t y_pos;
 } Transform_t;
 
+typedef struct MoveTriggerLocal
+{
+    bool relative;
+    int16_t x_pos;
+    int16_t y_pos;
+} MoveTriggerLocal_t;
+
+typedef struct MoveTriggerScene
+{
+    bool relative;
+    int32_t index;
+} MoveTriggerScene_t;
+
 typedef struct Thing
 {
     bool used;
