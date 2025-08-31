@@ -1,11 +1,11 @@
-#include "terminal_utils.h"
-#include "terminal_ncurses.h"
-
 #include <errno.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
 #include <time.h>
+
+#include "softcover_utils.h"
+#include "softcover_ncurses.h"
 
 #define LOADBMP_IMPLEMENTATION
 #include "loadbmp.h"

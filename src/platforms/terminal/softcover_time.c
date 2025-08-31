@@ -1,4 +1,4 @@
-#include "terminal_time.h"
+#include "softcover_time.h"
 
 static struct timespec last_cycle_start_clock = {0};
 static int64_t last_cycle_elapsed_us = 0;

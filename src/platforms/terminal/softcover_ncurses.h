@@ -1,11 +1,11 @@
-#ifndef TERMINAL_NCURSES_H
-#define TERMINAL_NCURSES_H
+#ifndef SOFTCOVER_NCURSES_H
+#define SOFTCOVER_NCURSES_H
 
 #include <ncurses.h>
 
 #include "common_interface.h"
 #include "common_structs.h"
-#include "terminal_debug.h"
+#include "softcover_debug.h"
 
 typedef enum GfxDebugMode
 {

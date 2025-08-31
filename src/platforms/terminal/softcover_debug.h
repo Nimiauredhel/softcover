@@ -1,5 +1,5 @@
-#ifndef TERMINAL_DEBUG_H
-#define TERMINAL_DEBUG_H
+#ifndef SOFTCOVER_DEBUG_H
+#define SOFTCOVER_DEBUG_H
 
 #include <stdint.h>
 

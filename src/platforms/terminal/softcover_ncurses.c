@@ -1,7 +1,7 @@
-#include "terminal_ncurses.h"
-#include "terminal_utils.h"
-#include "terminal_debug.h"
-#include "terminal_time.h"
+#include "softcover_ncurses.h"
+#include "softcover_utils.h"
+#include "softcover_debug.h"
+#include "softcover_time.h"
 
 #include <string.h>
 

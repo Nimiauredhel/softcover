@@ -10,10 +10,10 @@
 #include "common_interface.h"
 #include "common_structs.h"
 
-#include "terminal_time.h"
-#include "terminal_utils.h"
-#include "terminal_ncurses.h"
-#include "terminal_portaudio.h"
+#include "softcover_time.h"
+#include "softcover_utils.h"
+#include "softcover_ncurses.h"
+#include "softcover_portaudio.h"
 
 #ifndef LIB_NAME
 #define LIB_NAME ""
@@ -29,6 +29,7 @@ void set_should_terminate(bool value);
 static const char *state_filename_format = "%s.state";
 
 static char lib_path[128] = LIB_NAME;
+static char lib_mod_path[132] = "\0";
 
 static char platform_top_debug_buff[DEBUG_MESSAGE_MAX_LEN];
 
@@ -46,7 +47,6 @@ static AppLoopFunc app_loop;
 static AppExitFunc app_exit;
 
 static void *lib_handle = NULL;
-static void (*func_handle)(void) = NULL;
 
 static AppMemoryPartition_t app_memory = {0};
 
@@ -207,17 +207,35 @@ void set_should_terminate(bool value)
     should_terminate = value;
 }
 
-static void load_app(void)
+static bool was_app_modified(void)
 {
-    debug_log("Loading app layer.");
+    static struct stat file_stat = {0};
 
+    stat(lib_mod_path, &file_stat);
+    lib_modified_time = file_stat.st_mtime;
+
+    return lib_modified_time != lib_load_time;
+}
+
+static void unload_app(void)
+{
     if (lib_handle != NULL)
     {
         debug_log("Closing previously loaded handle.");
         dlclose(lib_handle);
         lib_handle = NULL;
-        func_handle = NULL;
+        app_setup = NULL;
+        app_init = NULL;
+        app_loop = NULL;
+        app_exit = NULL;
     }
+}
+
+static void load_app(void)
+{
+    debug_log("Loading app layer.");
+
+    unload_app();
 
     lib_handle = dlopen(lib_path, RTLD_NOW | RTLD_GLOBAL);
 
@@ -234,16 +252,34 @@ static void load_app(void)
     app_loop = (AppLoopFunc)dlsym(lib_handle, app_loop_name);
     app_exit = (AppExitFunc)dlsym(lib_handle, app_exit_name);
 
+    if (lib_mod_path[0] == '\0')
+    {
+        snprintf(lib_mod_path, sizeof(lib_mod_path), "%s.mod", lib_path);
+    }
+
+    fclose(fopen(lib_mod_path, "wb"));
+
     struct stat lib_stat = {0};
-    stat(lib_path, &lib_stat);
+    stat(lib_mod_path, &lib_stat);
     lib_load_time = lib_stat.st_mtime;
+}
+
+static void init_app(void)
+{
+    if (app_init != NULL)
+    {
+        app_init(&platform, &app_memory);
+    }
+    else
+    {
+        platform.debug_log("Null pointer to app init function.");
+        should_terminate = true;
+    }
 }
 
 int main(int argc, char **argv)
 {
 #define TERMINATION_POINT if (should_terminate) goto platform_termination
-
-    static struct stat file_stat = {0};
 
     initialize_signal_handler();
 
@@ -279,13 +315,7 @@ int main(int argc, char **argv)
     gfx_init(&platform_settings, &app_memory.gfx_buffer);
     input_init(&platform_settings, &app_memory.input_buffer);
 
-    if (app_init != NULL)
-    {
-        app_init(&platform, &app_memory);
-    }
-    else
-    {
-    }
+    init_app();
 
     TERMINATION_POINT;
 
@@ -310,14 +340,14 @@ int main(int argc, char **argv)
             gfx_audio_vis(app_memory.audio_buffer, &platform_settings, audio_get_volume());
         }
 
-        stat(lib_path, &file_stat);
-        lib_modified_time = file_stat.st_mtime;
-
-        if (lib_modified_time != lib_load_time)
+        if (was_app_modified())
         {
             debug_log("App modification detected.");
             load_app();
+            init_app();
         }
+
+        TERMINATION_POINT;
 
         time_mark_cycle_end(platform_settings.gfx_frame_time_target_us);
         int64_t last_cycle_leftover_us = time_get_leftover_us();
@@ -333,13 +363,7 @@ platform_termination:
 
     if (app_exit != NULL) app_exit();
 
-    if (lib_handle != NULL)
-    {
-        debug_log("Closing previously loaded handle.");
-        dlclose(lib_handle);
-        lib_handle = NULL;
-        func_handle = NULL;
-    }
+    unload_app();
 
     audio_deinit();
     gfx_deinit();

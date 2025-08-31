@@ -1,5 +1,5 @@
-#ifndef TERMINAL_TIME_H
-#define TERMINAL_TIME_H
+#ifndef SOFTCOVER_TIME_H
+#define SOFTCOVER_TIME_H
 
 #include <stdint.h>
 #include <time.h>

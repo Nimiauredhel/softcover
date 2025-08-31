@@ -1,8 +1,9 @@
-#ifndef AUDIO_H
-#define AUDIO_H
+#ifndef SOFTCOVER_PORTAUDIO_H
+#define SOFTCOVER_PORTAUDIO_H
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "portaudio.h"
 
 #include "common_interface.h"
 #include "common_structs.h"

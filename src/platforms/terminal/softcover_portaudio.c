@@ -1,10 +1,8 @@
-#include "terminal_portaudio.h"
-
 #include <stdio.h>
 #include <string.h>
 
-#include "portaudio.h"
-#include "terminal_debug.h"
+#include "softcover_portaudio.h"
+#include "softcover_debug.h"
 
 static bool audio_is_initialized = false;
 static PaStream *audio_stream = NULL;

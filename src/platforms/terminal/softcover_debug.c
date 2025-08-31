@@ -1,6 +1,6 @@
-#include "terminal_debug.h"
-#include "terminal_utils.h"
-#include "terminal_ncurses.h"
+#include "softcover_debug.h"
+#include "softcover_utils.h"
+#include "softcover_ncurses.h"
 
 static bool debug_is_break = false;
 static DebugRing_t debug_ring = {0};

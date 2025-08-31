@@ -1,5 +1,5 @@
-#ifndef TERMINAL_UTILS_H
-#define TERMINAL_UTILS_H
+#ifndef SOFTCOVER_UTILS_H
+#define SOFTCOVER_UTILS_H
 
 #include <stdbool.h>
 

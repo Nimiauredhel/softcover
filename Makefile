@@ -1,9 +1,10 @@
 EXE_NAME=softcover$(EXE_SUFFIX)
-EXE_SRC_DIR=src/platforms/$(PLATFORM_NAME)/
+EXE_SOURCES=src/platforms/$(PLATFORM_NAME)/*.c
 EXE_PATH=$(BUILD_DIR)$(EXE_NAME)
 
 LIB_NAME=app$(LIB_SUFFIX)
-LIB_SRC_DIR=src/app/
+LIB_SOURCES=src/app/*.c
+LIB_ASSETS=assets/*
 LIB_PATH=$(BUILD_DIR)$(LIB_NAME)
 
 COMMON_SOURCES=src/common/*.c
@@ -17,7 +18,7 @@ BUILD_DIR=build/
 ASSETS_DIR=assets/
 RUN_CMD=./$(EXE_NAME) $(ARGS)
 
-EXE_SUFFIX=.o
+EXE_SUFFIX=.bin
 LIB_SUFFIX=.so
 PLATFORM_NAME=terminal
 FLAGS=$(FLAGS_DEFAULT)
@@ -35,19 +36,20 @@ platform: $(EXE_PATH)
 .PHONY: app
 app: $(LIB_PATH)
 
-$(EXE_PATH): $(EXE_SRC_DIR)*.c
+$(EXE_PATH): $(EXE_SOURCES)
 	mkdir -p $(BUILD_DIR)
 	rm -f compile_commands.json
-	bear -- gcc $(EXE_SRC_DIR)*.c $(COMMON_SOURCES) $(COMMON_INCLUDES) $(EXE_INCLUDES) $(DEFINES) $(FLAGS) -o $(EXE_PATH)
+	bear -- gcc $(EXE_SOURCES) $(COMMON_SOURCES) $(COMMON_INCLUDES) $(EXE_INCLUDES) $(DEFINES) $(FLAGS) -o $(EXE_PATH)
 	mv compile_commands.json $(BUILD_DIR)platform_compile_commands.json
 	jq -s add $(BUILD_DIR)*.json > compile_commands.json
 
-$(LIB_PATH): $(LIB_SRC_DIR)*.c
+$(LIB_PATH): $(LIB_SOURCES) $(LIB_ASSETS)
 	mkdir -p $(BUILD_DIR)
 	rm -f compile_commands.json
-	bear -- gcc $(LIB_SRC_DIR)*.c $(COMMON_SOURCES) $(COMMON_INCLUDES) $(LIB_INCLUDES) $(DEFINES) $(FLAGS) -fPIC -shared -o $(LIB_PATH)
+	bear -- gcc $(LIB_SOURCES) $(COMMON_SOURCES) $(COMMON_INCLUDES) $(LIB_INCLUDES) $(DEFINES) $(FLAGS) -fPIC -shared -o $(LIB_PATH)
 	mv compile_commands.json $(BUILD_DIR)app_compile_commands.json
 	jq -s add $(BUILD_DIR)*.json > compile_commands.json
+	touch $(LIB_PATH).mod
                                      
 .PHONY: debug
 debug:
