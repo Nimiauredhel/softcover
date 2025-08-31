@@ -13,7 +13,7 @@ bool debug_gfx = false;
 
 void gfx_world_to_screen_coords(int16_t *x_ptr, int16_t *y_ptr)
 {
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
+    Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
 
     *x_ptr += gfx_buffer->width/2;
     *x_ptr -= scene->entities[serializables->focal_entity_idx].transform.x_pos;
@@ -68,7 +68,7 @@ void gfx_debug_draw_collider(uint32_t thing_idx, uint32_t draw_val)
 {
     if (gfx_buffer == NULL) return;
 
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
+    Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
 
     if (!scene->entities[thing_idx].used) return;
     if (!(ephemerals->definitions[scene->entities[thing_idx].definition_idx].flags & THING_FLAGS_COLLISION)) return;
@@ -126,15 +126,15 @@ void gfx_debug_draw_collider(uint32_t thing_idx, uint32_t draw_val)
 
 void gfx_draw_thing(uint32_t thing_idx)
 {
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
+    Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
 
     if (!scene->entities[thing_idx].used) return;
 
-    size_t texture_offset = ephemerals->texture_offsets[entity_get_sprite(&scene->entities[thing_idx])->texture_idx];
+    size_t texture_offset = ephemerals->texture_offsets[entity_get_sprite(thing_idx)->texture_idx];
     Texture_t *texture_ptr = (Texture_t *)(ephemerals->bump_buffer+texture_offset);
 
-    int16_t x = scene->entities[thing_idx].transform.x_pos - entity_get_sprite(&scene->entities[thing_idx])->x_offset;
-    int16_t y = scene->entities[thing_idx].transform.y_pos - entity_get_sprite(&scene->entities[thing_idx])->y_offset;
+    int16_t x = scene->entities[thing_idx].transform.x_pos - entity_get_sprite(thing_idx)->x_offset;
+    int16_t y = scene->entities[thing_idx].transform.y_pos - entity_get_sprite(thing_idx)->y_offset;
 
     gfx_world_to_screen_coords(&x, &y);
 
@@ -147,7 +147,7 @@ void gfx_draw_all_entities_debug(void)
     static uint16_t step = 0;
     static uint16_t counter = 0;
 
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
+    Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
 
     /*
     snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff),
@@ -185,7 +185,7 @@ void gfx_draw_all_entities_debug(void)
 
 void gfx_draw_all_entities(void)
 {
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
+    Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
 
     for (uint16_t i = 0; i < scene->entity_count; i++)
     {

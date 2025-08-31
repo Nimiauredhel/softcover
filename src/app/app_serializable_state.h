@@ -14,8 +14,8 @@ typedef struct AppSerializableState
     uint16_t mov_speed;
     uint16_t controlled_entity_idx;
     uint16_t focal_entity_idx;
+    uint8_t current_scene_index;
     uint8_t scene_count;
-    uint8_t scene_index;
     Scene_t scenes[APP_STATE_MAX_SCENES];
 } AppSerializableState_t;
 

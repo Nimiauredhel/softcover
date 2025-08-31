@@ -30,11 +30,11 @@ static void entities_update_draw_order(void);
 static void entities_get_distance(uint16_t first_entity_id, uint16_t second_entity_id, int32_t *x_dist_out, int32_t *y_dist_out);
 static uint16_t entity_test_collision(uint16_t entity_id);
 static void entity_move(uint16_t entity_idx, int16_t x_delta, int16_t y_delta);
-static int32_t entity_create(uint16_t definition_id, uint8_t layer, int32_t x, int32_t y);
+static int32_t entity_create(uint16_t definition_id, bool local_def, uint8_t layer, int32_t x, int32_t y);
 static void entity_set_pos(uint32_t entity_id, int32_t x, int32_t y);
-static int8_t entities_compare_y(EntityLive_t *first, EntityLive_t *second);
-static int8_t entities_compare_layer(EntityLive_t *first, EntityLive_t *second);
-static void entities_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t (*comparer)(EntityLive_t*, EntityLive_t*));
+static int8_t entities_compare_y(uint16_t first_id, uint16_t second_id);
+static int8_t entities_compare_layer(uint16_t first_id, uint16_t second_id);
+static void entities_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t (*comparer)(uint16_t, uint16_t));
 
 static void load_ephemerals(void);
 
@@ -74,6 +74,7 @@ static void input_process_all(void)
                 break;
             case 'q':
                 serializables->controlled_entity_idx = serializables->controlled_entity_idx == 0 ? 1 : 0;
+                serializables->focal_entity_idx = serializables->focal_entity_idx == 0 ? 1 : 0;
                 break;
             case '1':
                 platform->storage_load_state("test_save");
@@ -303,7 +304,7 @@ static void load_definitions_all(void)
     }
 }
 
-static int32_t definition_get_idx_by_name(char *name)
+static int32_t global_definition_get_idx_by_name(char *name)
 {
     for (uint16_t i = 0; i < ephemerals->definitions_count; i++)
     {
@@ -316,28 +317,51 @@ static int32_t definition_get_idx_by_name(char *name)
     return -1;
 }
 
-static int32_t definition_clone(int32_t src_idx, char *clone_name)
+static int32_t local_definition_get_idx_by_name(char *name)
 {
-    if (ephemerals->definitions_count >= APP_ENTITY_DEFS_MAX_COUNT)
+    Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
+
+    for (uint16_t i = 0; i < scene->definitions_count; i++)
     {
-        platform->debug_log("Cannot clone definition: limit reached.");
+        if (strcmp(name, scene->definitions[i].name) == 0)
+        {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+static int32_t definition_clone_to_local(int32_t src_idx, bool src_is_local, char *clone_name)
+{
+    Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
+
+    if (scene->definitions_count >= SCENE_ENTITY_DEFS_MAX_COUNT)
+    {
+        platform->debug_log("Cannot clone definition to scene local: limit reached.");
         return -1;
     } 
-    else if (src_idx < 0 || src_idx >= APP_ENTITY_DEFS_MAX_COUNT)
+    else if (src_idx < 0 || (!src_is_local && src_idx >= APP_ENTITY_DEFS_MAX_COUNT)
+         || (src_is_local && src_idx >= SCENE_ENTITY_DEFS_MAX_COUNT))
     {
         platform->debug_log("Cannot clone definition: invalid source index.");
         return -1;
     }    
 
-    int32_t dst_idx = ephemerals->definitions_count;
-    ephemerals->definitions_count++;
+    int32_t dst_idx = scene->definitions_count;
+    scene->definitions_count++;
 
     /// ISSUE: this currently needs to be updated every time a new component is added
-    memcpy(ephemerals->definitions+dst_idx, ephemerals->definitions+src_idx, sizeof(EntityDefinition_t));
-    memcpy(ephemerals->sprites+dst_idx, ephemerals->sprites+src_idx, sizeof(Sprite_t));
-    memcpy(ephemerals->colliders+dst_idx, ephemerals->colliders+src_idx, sizeof(Collider_t));
-    memcpy(ephemerals->sound_emitters+dst_idx, ephemerals->sound_emitters+src_idx, sizeof(SoundEmitter_t));
-    strncpy(ephemerals->definitions[dst_idx].name, clone_name, sizeof(ephemerals->definitions[dst_idx].name));
+    memcpy(scene->definitions+dst_idx,
+           (src_is_local ? scene->definitions : ephemerals->definitions)+src_idx, sizeof(EntityDefinition_t));
+    memcpy(scene->sprites+dst_idx,
+           (src_is_local ? scene->sprites : ephemerals->sprites)+src_idx, sizeof(Sprite_t));
+    memcpy(scene->colliders+dst_idx,
+           (src_is_local ? scene->colliders : ephemerals->colliders)+src_idx, sizeof(Collider_t));
+    memcpy(scene->sound_emitters+dst_idx,
+           (src_is_local ? scene->sound_emitters : ephemerals->sound_emitters)+src_idx, sizeof(SoundEmitter_t));
+    strncpy(scene->definitions[dst_idx].name,
+           clone_name, sizeof(scene->definitions[dst_idx].name));
 
     return dst_idx;
 }
@@ -349,6 +373,8 @@ static void load_scene_by_path(char *path)
 
     if (txt_len > 0)
     {
+        Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
+
         char *current_line = (char *)ephemerals->scratch;
         char *next_line = NULL;
 
@@ -357,6 +383,7 @@ static void load_scene_by_path(char *path)
 
         uint32_t line_num = 0;
         int32_t definition_index = -1;
+        bool def_is_local = false;
         uint16_t layer_index = 0;
         uint16_t x_pos = 0;
         uint16_t y_pos = 0;
@@ -374,7 +401,8 @@ static void load_scene_by_path(char *path)
 
                 if (strcmp(token, "DEFINITION") == 0)
                 {
-                    definition_index = definition_get_idx_by_name(value);
+                    def_is_local = false;
+                    definition_index = global_definition_get_idx_by_name(value);
                 }
                 else if (definition_index < 0)
                 {
@@ -392,37 +420,39 @@ static void load_scene_by_path(char *path)
                     x_pos = atoi(value);
                     value = strtok(NULL, " ");
                     y_pos = atoi(value);
-                    entity_create(definition_index, layer_index, x_pos, y_pos);
+                    entity_create(definition_index, def_is_local, layer_index, x_pos, y_pos);
                 }
                 else if (strcmp(token, "VARIANT") == 0)
                 {
-                    /// scene file is specifying and naming a variant of the selected definition.
-                    /// if a definition with the requested name was already created, use it.
+                    /// scene file is specifying and naming a local variant of the selected definition.
+                    /// if a local definition with the requested name was already created, use it.
                     int32_t src_idx = definition_index;
-                    definition_index = definition_get_idx_by_name(value);
-                    /// else, clone the base definition.
+                    definition_index = local_definition_get_idx_by_name(value);
+                    /// else, clone the base definition to a scene local definition.
                     if (definition_index < 0)
                     {
-                        definition_index = definition_clone(src_idx, value);
+                        definition_index = definition_clone_to_local(src_idx, def_is_local, value);
+                        /// TODO: check return value
                     }
+                    def_is_local = true;
                 }
                 else if (strcmp(token, "COLLISION_SET_SCENE") == 0)
                 {
-                    ephemerals->colliders[definition_index].flags |= COLL_FLAGS_SET_SCENE;
-                    ephemerals->colliders[definition_index].params[1] = atoi(value);
+                    scene->colliders[definition_index].flags |= COLL_FLAGS_SET_SCENE;
+                    scene->colliders[definition_index].params[1] = atoi(value);
                 }
                 else if (strcmp(token, "COLLISION_SET_POSITION") == 0)
                 {
-                    ephemerals->colliders[definition_index].flags |= COLL_FLAGS_SET_POSITION;
+                    scene->colliders[definition_index].flags |= COLL_FLAGS_SET_POSITION;
                     value = strtok(value, " ");
-                    ephemerals->colliders[definition_index].params[2] = atoi(value);
+                    scene->colliders[definition_index].params[2] = atoi(value);
                     value = strtok(NULL, " ");
-                    ephemerals->colliders[definition_index].params[3] = atoi(value);
+                    scene->colliders[definition_index].params[3] = atoi(value);
                 }
                 else if (strcmp(token, "COLLISION_CALLBACK") == 0)
                 {
-                    ephemerals->colliders[definition_index].flags |= COLL_FLAGS_CALLBACK;
-                    ephemerals->colliders[definition_index].params[4] = atoi(value);
+                    scene->colliders[definition_index].flags |= COLL_FLAGS_CALLBACK;
+                    scene->colliders[definition_index].params[4] = atoi(value);
                 }
                 else
                 {
@@ -436,10 +466,10 @@ static void load_scene_by_path(char *path)
             current_line = next_line ? next_line + 1 : NULL;
         }
 
-        serializables->scenes[serializables->scene_index].loaded = true;
+        serializables->scenes[serializables->current_scene_index].loaded = true;
 
         snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff),
-                "Loaded scene [%s], entity count: %u", path, serializables->scenes[serializables->scene_index].entity_count);
+                "Loaded scene [%s], entity count: %u", path, serializables->scenes[serializables->current_scene_index].entity_count);
         platform->debug_log(ephemerals->debug_buff);
 
         entities_initialize_draw_order();
@@ -457,7 +487,7 @@ static void load_scene_by_index(uint8_t index)
     /// if scene was loaded before, simply set it to be the current scene
     if (serializables->scenes[index].loaded)
     {
-        serializables->scene_index = index;
+        serializables->current_scene_index = index;
         entities_initialize_draw_order();
         return;
     }
@@ -497,7 +527,7 @@ static void load_scene_by_index(uint8_t index)
 
         if (found)
         {
-            serializables->scene_index = index;
+            serializables->current_scene_index = index;
             load_scene_by_path(path);
         }
     }
@@ -528,9 +558,10 @@ static void audio_push_clip(AudioClip_t *clip)
     audio_push_samples(clip->samples, clip->num_samples, clip->num_channels);
 }
 
-static int32_t entity_create(uint16_t definition_id, uint8_t layer, int32_t x, int32_t y)
+static int32_t entity_create(uint16_t definition_id, bool local_def, uint8_t layer, int32_t x, int32_t y)
 {
-    uint16_t index = serializables->scenes[serializables->scene_index].entity_count;
+    Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
+    uint16_t index = scene->entity_count;
 
     if (index >= SCENE_ENTITIES_MAX_COUNT)
     {
@@ -538,11 +569,13 @@ static int32_t entity_create(uint16_t definition_id, uint8_t layer, int32_t x, i
         return -1;
     }
 
-    serializables->scenes[serializables->scene_index].entity_count++;
+    serializables->scenes[serializables->current_scene_index].entity_count++;
 
-    EntityLive_t *entity = &serializables->scenes[serializables->scene_index].entities[index];
+    Entity_t *entity = &scene->entities[index];
+    EntityDefinition_t *definition = local_def ? &scene->definitions[definition_id] : &ephemerals->definitions[definition_id];
 
     entity->used = true;
+    entity->definition_is_local = local_def;
     entity->layer = layer;
     entity->definition_idx = definition_id;
 
@@ -550,7 +583,7 @@ static int32_t entity_create(uint16_t definition_id, uint8_t layer, int32_t x, i
     entity->transform.y_pos = y;
 
     snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Created new %s[%u] at index %u, [%u,%u] layer %u.",
-            ephemerals->definitions[definition_id].name, definition_id, index, x, y, layer);
+            definition->name, definition_id, index, x, y, layer);
     platform->debug_log(ephemerals->debug_buff);
 
     return index;
@@ -558,29 +591,33 @@ static int32_t entity_create(uint16_t definition_id, uint8_t layer, int32_t x, i
 
 static void entity_set_pos(uint32_t entity_id, int32_t x, int32_t y)
 {
-    serializables->scenes[serializables->scene_index].entities[entity_id].transform.x_pos = x;
-    serializables->scenes[serializables->scene_index].entities[entity_id].transform.y_pos = y;
+    serializables->scenes[serializables->current_scene_index].entities[entity_id].transform.x_pos = x;
+    serializables->scenes[serializables->current_scene_index].entities[entity_id].transform.y_pos = y;
 
     snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Set Thing %u at position [%d,%d].", entity_id, x, y);
     platform->debug_log(ephemerals->debug_buff);
 }
 
-static int8_t entities_compare_y(EntityLive_t *first, EntityLive_t *second)
+static int8_t entities_compare_y(uint16_t first_id, uint16_t second_id)
 {
-    return (first->transform.y_pos + entity_get_sprite(first)->y_offset) - (second->transform.y_pos + entity_get_sprite(second)->y_offset);
+    return (serializables->scenes[serializables->current_scene_index].entities[first_id].transform.y_pos
+            + entity_get_sprite(first_id)->y_offset)
+         - (serializables->scenes[serializables->current_scene_index].entities[second_id].transform.y_pos
+            + entity_get_sprite(second_id)->y_offset);
 }
 
-static int8_t entities_compare_layer(EntityLive_t *first, EntityLive_t *second)
+static int8_t entities_compare_layer(uint16_t first_id, uint16_t second_id)
 {
-    return first->layer - second->layer;
+    return serializables->scenes[serializables->current_scene_index].entities[first_id].layer
+         - serializables->scenes[serializables->current_scene_index].entities[second_id].layer;
 }
 
-static void entities_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t (*comparer)(EntityLive_t*, EntityLive_t*))
+static void entities_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t (*comparer)(uint16_t, uint16_t))
 {
     uint16_t temp;
     bool swapped = false;
 
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
+    Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
 
     for (; end_idx > start_idx; end_idx--)
     {
@@ -594,8 +631,8 @@ static void entities_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8
         for (uint16_t i = start_idx; i < end_idx; i++)
         {
             if (comparer(
-                        scene->entities+ephemerals->entities_draw_order[i],
-                        scene->entities+ephemerals->entities_draw_order[i+1])
+                        ephemerals->entities_draw_order[i],
+                        ephemerals->entities_draw_order[i+1])
                         > 0)
             {
                 swapped = true;
@@ -611,7 +648,7 @@ static void entities_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8
 
 static void entities_initialize_draw_order(void)
 {
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
+    Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
 
     if (scene->entity_count <= 0)
     {
@@ -634,7 +671,7 @@ static void entities_initialize_draw_order(void)
     entities_sort_by_comparer(0, scene->entity_count-1, entities_compare_layer);
 
     uint8_t layer = 0;
-    EntityLive_t *entity;
+    Entity_t *entity;
 
     // default layer 0 offset before the actual work
     entity = scene->entities+ephemerals->entities_draw_order[0];
@@ -655,7 +692,7 @@ static void entities_initialize_draw_order(void)
 
 static void entities_update_draw_order(void)
 {
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
+    Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
 
     if (scene->entity_count <= 0)
     {
@@ -695,7 +732,7 @@ static void entities_update_draw_order(void)
 
 static void entities_get_distance(uint16_t first_entity_id, uint16_t second_entity_id, int32_t *x_dist_out, int32_t *y_dist_out)
 {
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
+    Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
 
     *x_dist_out = scene->entities[first_entity_id].transform.x_pos - scene->entities[second_entity_id].transform.x_pos;
     *y_dist_out = scene->entities[first_entity_id].transform.y_pos - scene->entities[second_entity_id].transform.y_pos;
@@ -706,11 +743,14 @@ static void entities_get_distance(uint16_t first_entity_id, uint16_t second_enti
 
 static uint16_t entity_test_collision(uint16_t entity_id)
 {
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
-    if (!(ephemerals->definitions[scene->entities[entity_id].definition_idx].flags & THING_FLAGS_COLLISION)) return entity_id;
+    Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
+    Entity_t *entity = &scene->entities[entity_id];
+    EntityDefinition_t *definition = entity->definition_is_local ? &scene->definitions[entity->definition_idx] : &ephemerals->definitions[entity->definition_idx];
+
+    if (!(definition->flags & THING_FLAGS_COLLISION)) return entity_id;
 
     Transform_t *this_transform = &scene->entities[entity_id].transform;
-    Collider_t *this_collider = &ephemerals->colliders[scene->entities[entity_id].definition_idx];
+    Collider_t *this_collider = entity_get_collider(entity_id);
 
     Transform_t *other_transform = NULL;
     Collider_t *other_collider = NULL;
@@ -730,10 +770,10 @@ static uint16_t entity_test_collision(uint16_t entity_id)
         /// avoid testing against self
         if (i == entity_id) continue;
         /// avoid testing against non-collider
-        if (!(ephemerals->definitions[scene->entities[i].definition_idx].flags & THING_FLAGS_COLLISION)) continue;
+        if (!(entity_get_definition(i)->flags & THING_FLAGS_COLLISION)) continue;
 
         other_transform = &scene->entities[i].transform;
-        other_collider = &ephemerals->colliders[scene->entities[i].definition_idx];
+        other_collider = entity_get_collider(i);
 
         other_left =   other_transform->x_pos + other_collider->min_x;
         other_right =  other_transform->x_pos + other_collider->max_x;
@@ -756,12 +796,15 @@ static uint16_t entity_test_collision(uint16_t entity_id)
 
 static void entity_move(uint16_t entity_id, int16_t x_delta, int16_t y_delta)
 {
-    Scene_t *scene = &serializables->scenes[serializables->scene_index];
+    Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
 
     if (!scene->entities[entity_id].used) return;
 
     scene->entities[entity_id].transform.x_pos += x_delta;
     scene->entities[entity_id].transform.y_pos += y_delta;
+
+    size_t sfx_offset = ephemerals->sound_offsets[entity_get_sounds(entity_id)->move_sfx_idx];
+    audio_push_clip((AudioClip_t *)(ephemerals->bump_buffer+sfx_offset));
 
     uint16_t other_idx = entity_test_collision(entity_id);
 
@@ -775,34 +818,32 @@ static void entity_move(uint16_t entity_id, int16_t x_delta, int16_t y_delta)
     COLL_FLAGS_SET_POSITION = 0x08,
     COLL_FLAGS_CALLBACK = 0x10,
     */
-        /// intentional copy to survive a potential possible scene transition
-        /// TODO: make this hack unnecessary
-        Collider_t other_coll_copy = ephemerals->colliders[scene->entities[other_idx].definition_idx];
+        Collider_t *other_coll = entity_get_collider(other_idx);
 
-        if (other_coll_copy.flags & COLL_FLAGS_BLOCK)
+        if (other_coll->flags & COLL_FLAGS_BLOCK)
         {
             entity_set_pos(entity_id, scene->entities[entity_id].transform.x_pos - x_delta, scene->entities[entity_id].transform.y_pos - y_delta);
         }
 
-        if (other_coll_copy.flags & COLL_FLAGS_PLAY_SOUND)
+        if (other_coll->flags & COLL_FLAGS_PLAY_SOUND)
         {
-            audio_push_clip((AudioClip_t *)(ephemerals->bump_buffer+ephemerals->sound_offsets[other_coll_copy.params[0]]));
+            audio_push_clip((AudioClip_t *)(ephemerals->bump_buffer+ephemerals->sound_offsets[other_coll->params[0]]));
         }
 
-        if ((other_coll_copy.flags & COLL_FLAGS_SET_SCENE)
+        if ((other_coll->flags & COLL_FLAGS_SET_SCENE)
             && entity_id == serializables->controlled_entity_idx)
         {
-            load_scene_by_index(other_coll_copy.params[1]);
+            load_scene_by_index(other_coll->params[1]);
             /// TODO: this is obviously a bad way to do it and needs to go later
             serializables->controlled_entity_idx = entity_id;
         }
 
-        if (other_coll_copy.flags & COLL_FLAGS_SET_POSITION)
+        if (other_coll->flags & COLL_FLAGS_SET_POSITION)
         {
-            entity_set_pos(entity_id, other_coll_copy.params[2], other_coll_copy.params[3]);
+            entity_set_pos(entity_id, other_coll->params[2], other_coll->params[3]);
         }
 
-        if (other_coll_copy.flags & COLL_FLAGS_CALLBACK)
+        if (other_coll->flags & COLL_FLAGS_CALLBACK)
         {
             /// TODO: add collision callback array
         }
@@ -810,8 +851,6 @@ static void entity_move(uint16_t entity_id, int16_t x_delta, int16_t y_delta)
         return;
     }
 
-    size_t sfx_offset = ephemerals->sound_offsets[entity_get_sounds(&scene->entities[entity_id])->move_sfx_idx];
-    audio_push_clip((AudioClip_t *)(ephemerals->bump_buffer+sfx_offset));
     /*
     snprintf(ephemerals->debug_buff, sizeof(ephemerals->debug_buff), "Thing %d moved to [%d,%d]", entity_idx,
             serializables->entities[entity_idx].x_pos, serializables->entities[entity_idx].y_pos);

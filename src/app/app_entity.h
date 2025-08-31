@@ -77,25 +77,19 @@ typedef struct MoveTriggerScene
     int32_t index;
 } MoveTriggerScene_t;
 
-typedef struct EntityStored
-{
-    char definition_name[ENTITY_DEF_NAME_MAX_LEN];
-    uint8_t layer;
-    Transform_t transform;
-} EntityStored_t;
-
-typedef struct EntityLive
+typedef struct Entity
 {
     bool used;
+    bool definition_is_local;
     uint16_t definition_idx;
     uint8_t layer;
     Transform_t transform;
-} EntityLive_t;
+} Entity_t;
 
-EntityDefinition_t* entity_get_definition(EntityLive_t *entity);
-Sprite_t* entity_get_sprite(EntityLive_t *entity);
-Collider_t* entity_get_collider(EntityLive_t *entity);
-SoundEmitter_t* entity_get_sounds(EntityLive_t *entity);
+EntityDefinition_t* entity_get_definition(uint16_t entity_idx);
+Sprite_t* entity_get_sprite(uint16_t entity_idx);
+Collider_t* entity_get_collider(uint16_t entity_idx);
+SoundEmitter_t* entity_get_sounds(uint16_t entity_idx);
 
 #endif
 

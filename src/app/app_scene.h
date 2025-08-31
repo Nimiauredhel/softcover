@@ -2,15 +2,25 @@
 #define APP_SCENE_H
 
 #define SCENE_ENTITIES_MAX_COUNT (512)
+#define SCENE_ENTITY_DEFS_MAX_COUNT (8)
 
 #include "app_entity.h"
 
 typedef struct Scene
 {
+    /// has the scene already been loaded and populated in the app state
     bool loaded;
-    uint8_t index;
+
+    /// scene local entity storage
     uint16_t entity_count;
-    EntityLive_t entities[SCENE_ENTITIES_MAX_COUNT];
+    Entity_t entities[SCENE_ENTITIES_MAX_COUNT];
+
+    /// scene local definition storage
+    uint16_t definitions_count;
+    EntityDefinition_t definitions[SCENE_ENTITY_DEFS_MAX_COUNT];
+    Sprite_t sprites[SCENE_ENTITY_DEFS_MAX_COUNT];
+    Collider_t colliders[SCENE_ENTITY_DEFS_MAX_COUNT];
+    SoundEmitter_t sound_emitters[SCENE_ENTITY_DEFS_MAX_COUNT];
 } Scene_t;
 
 #endif
