@@ -81,36 +81,48 @@ void gfx_refresh_debug_window(DebugRing_t *debug_ring, bool is_break)
 
 int input_read(void)
 {
-    /*
-    if (sdl_gfx_is_initialized)
+    static SDL_Event event;
+    static SDL_Keycode latest_keycode = SDLK_UNKNOWN;
+
+    while (SDL_PollEvent(&event))
     {
-        return wgetch(main_window);
+        switch (event.type)
+        {
+            case SDL_KEYUP:
+                if (latest_keycode == event.key.keysym.sym)
+                {
+                    latest_keycode = SDLK_UNKNOWN;
+                }
+                break;
+            case SDL_QUIT:
+            case SDL_APP_TERMINATING:
+                should_terminate = true;
+                return -1;
+            case SDL_KEYDOWN:
+                latest_keycode = event.key.keysym.sym;
+            default:
+                break;
+        }
     }
-    else
-    {
-        return fgetc(stdin);
-    }
-    */
-    return -1;
+
+    return latest_keycode;
 }
 
 void input_push_to_buffer(PlatformSettings_t *settings, UniformRing_t *input_buffer)
 {
-    /*
     int c = '~';
 
     for (uint8_t i = 0; i < 8; i++)
     {
         c = input_read();
         if (c == '~') continue;
-        if (c == KEY_LEFT)
+        if (c == SDLK_LEFT)
         {
             gfx_toggle_debug_mode();
             continue;
         }
         ring_push(input_buffer, &c, 1, false);
     }
-    */
 }
 
 void gfx_sync_buffer(Texture_t *gfx_buffer)
@@ -236,8 +248,7 @@ void gfx_audio_vis(const UniformRing_t *audio_buffer, const PlatformSettings_t *
 
 void input_init(PlatformSettings_t *settings, UniformRing_t **input_buffer_pptr)
 {
-    //keypad(main_window, true);
-    /// init input buffer
+    SDL_Init(SDL_INIT_EVENTS);
     *input_buffer_pptr = ring_create(settings->input_buffer_capacity, sizeof(int));
 }
 
