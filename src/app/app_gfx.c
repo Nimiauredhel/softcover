@@ -35,22 +35,23 @@ void gfx_draw_texture(Texture_t *texture, int start_x, int start_y)
     int pixel_x;
     int pixel_y;
 
-    for (uint16_t texture_y = 0; texture_y < texture->height; texture_y++)
+    for (int32_t texture_y = 0; texture_y < texture->height; texture_y++)
     {
         pixel_y = start_y + texture_y;
         if (pixel_y >= gfx_buffer->height || pixel_y < 0) continue;
 
-        for (uint16_t texture_x = 0; texture_x < texture->width; texture_x++)
+        for (int32_t texture_x = 0; texture_x < texture->width; texture_x++)
         {
             pixel_x = start_x + texture_x;
             if (pixel_x >= gfx_buffer->width  || pixel_x < 0) continue;
 
-            uint16_t texture_idx = texture->pixel_size_bytes * (texture_x + (texture_y * texture->width));
-            uint16_t buffer_idx = gfx_buffer->pixel_size_bytes * (pixel_x + (pixel_y * gfx_buffer->width));
+            int32_t texture_idx = texture->pixel_size_bytes * (texture_x + (texture_y * texture->width));
+            int32_t buffer_idx = gfx_buffer->pixel_size_bytes * (pixel_x + (pixel_y * gfx_buffer->width));
 
             /// extremely dumb alpha test
             /// TODO: somehow move this responsibility to the platform side
             if ((texture->pixel_size_bytes == 1 && texture->pixels[texture_idx] > 64)
+             || (texture->pixel_size_bytes == 3 && (texture->pixels[texture_idx] + texture->pixels[texture_idx+1] + texture->pixels[texture_idx+2] < 32))
              || (texture->pixel_size_bytes == 4 && texture->pixels[texture_idx+3] == 0))
             {
                 continue;

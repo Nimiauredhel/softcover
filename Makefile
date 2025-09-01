@@ -9,7 +9,7 @@ LIB_PATH=$(BUILD_DIR)$(LIB_NAME)
 
 COMMON_SOURCES=src/common/*.c
 COMMON_INCLUDES=-Isrc/common
-EXE_INCLUDES=-lncurses -lportaudio
+EXE_INCLUDES=-lSDL2 -lSDL2main -lSDL2_ttf -lportaudio
 LIB_INCLUDES=-lm
 FLAGS_DEFAULT= -std=c99 -Wall -pedantic -Wextra
 FLAGS_DEBUG= -g -o0
@@ -20,7 +20,7 @@ RUN_CMD=./$(EXE_NAME) $(ARGS)
 
 EXE_SUFFIX=.bin
 LIB_SUFFIX=.so
-PLATFORM_NAME=linux-terminal
+PLATFORM_NAME=linux-window
 FLAGS=$(FLAGS_DEFAULT)
 ARGS=
 
