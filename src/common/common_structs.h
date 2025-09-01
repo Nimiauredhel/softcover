@@ -9,6 +9,7 @@ typedef struct Memory Memory_t;
 typedef struct Texture Texture_t;
 typedef struct AudioClip AudioClip_t;
 typedef struct UniformRing UniformRing_t;
+typedef struct InputEvent InputEvent_t;
 
 struct Memory
 {
@@ -38,6 +39,12 @@ struct UniformRing
     uint32_t head;
     uint8_t unit_size;
     uint8_t buffer[];
+};
+
+struct InputEvent
+{
+    int key;
+    int value;
 };
 
 UniformRing_t* ring_create(uint32_t capacity, uint8_t unit_size);

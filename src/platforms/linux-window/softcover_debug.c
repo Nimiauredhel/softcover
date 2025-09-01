@@ -62,12 +62,12 @@ void debug_break(void)
         debug_dump_log();
     }
 
-    char c = '~';
+    InputEvent_t e = {0};
 
-    while(c != '\n')
+    while(e.key != '\n')
     {
         if (resume_for_termination && should_terminate) break;
-        c = gfx_is_initialized() ? input_read() : fgetc(stdin);
+        e = input_read();
     }
 
     debug_is_break = false;

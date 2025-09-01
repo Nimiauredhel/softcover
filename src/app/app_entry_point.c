@@ -14,7 +14,7 @@
 
 static const Platform_t *platform = NULL;
 
-static char input_read_from_buffer(UniformRing_t *input_buffer);
+static bool input_read_from_buffer(UniformRing_t *input_buffer, InputEvent_t *out);
 static void input_process_all(void);
 
 static size_t load_texture_to_memory(char *name);
@@ -38,27 +38,21 @@ static void entities_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8
 
 static void load_ephemerals(void);
 
-static char input_read_from_buffer(UniformRing_t *input_buffer)
+static bool input_read_from_buffer(UniformRing_t *input_buffer, InputEvent_t *out)
 {
-    if (input_buffer == NULL) return '~';
-
-    int c = '~';
-
-    if (ring_pop(input_buffer, &c)) return c;
-    return '~';
+    if (input_buffer == NULL) return false;
+    return ring_pop(input_buffer, out);
 }
 
 static void input_process_all(void)
 {
     if (platform == NULL || serializables == NULL) return;
 
-    int input = '~';
+    InputEvent_t input = {0};
 
-    do
+    while(input_read_from_buffer(input_buffer, &input))
     {
-        input = input_read_from_buffer(input_buffer);
-
-        switch (input)
+        switch (input.key)
         {
             case 'w':
                 entity_move(serializables->controlled_entity_idx, 0, -serializables->mov_speed);
@@ -101,8 +95,6 @@ static void input_process_all(void)
                 break;
         }
     }
-    while(input != '~');
-
 }
 
 static size_t load_texture_to_memory(char *name)

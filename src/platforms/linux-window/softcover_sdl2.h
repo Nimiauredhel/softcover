@@ -17,7 +17,7 @@ typedef enum GfxDebugMode
     GFX_DEBUG_MAXVAL = 3,
 } GfxDebugMode_t;
 
-int input_read(void);
+InputEvent_t input_read(void);
 void input_push_to_buffer(PlatformSettings_t *settings, UniformRing_t *input_buffer);
 GfxDebugMode_t gfx_get_debug_mode(void);
 void gfx_toggle_debug_mode(void);

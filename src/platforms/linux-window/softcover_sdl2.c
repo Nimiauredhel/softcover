@@ -79,49 +79,50 @@ void gfx_refresh_debug_window(DebugRing_t *debug_ring, bool is_break)
     */
 }
 
-int input_read(void)
+InputEvent_t input_read(void)
 {
     static SDL_Event event;
-    static SDL_Keycode latest_keycode = SDLK_UNKNOWN;
 
-    while (SDL_PollEvent(&event))
+    InputEvent_t ret = {0};
+
+    if (SDL_PollEvent(&event))
     {
         switch (event.type)
         {
             case SDL_KEYUP:
-                if (latest_keycode == event.key.keysym.sym)
-                {
-                    latest_keycode = SDLK_UNKNOWN;
-                }
+                ret.value = 0;
                 break;
+            case SDL_WINDOWEVENT_CLOSE:
             case SDL_QUIT:
             case SDL_APP_TERMINATING:
                 should_terminate = true;
-                return -1;
+                break;
             case SDL_KEYDOWN:
-                latest_keycode = event.key.keysym.sym;
+                ret.value = 1;
+                break;
             default:
                 break;
         }
     }
 
-    return latest_keycode;
+    ret.key = event.key.keysym.sym;
+
+    return ret;
 }
 
 void input_push_to_buffer(PlatformSettings_t *settings, UniformRing_t *input_buffer)
 {
-    int c = '~';
+    InputEvent_t e = {0};
 
     for (uint8_t i = 0; i < 8; i++)
     {
-        c = input_read();
-        if (c == '~') continue;
-        if (c == SDLK_LEFT)
+        e = input_read();
+        if (e.key == SDLK_LEFT && e.value == 1)
         {
             gfx_toggle_debug_mode();
             continue;
         }
-        ring_push(input_buffer, &c, 1, false);
+        ring_push(input_buffer, &e, 1, false);
     }
 }
 
@@ -249,7 +250,7 @@ void gfx_audio_vis(const UniformRing_t *audio_buffer, const PlatformSettings_t *
 void input_init(PlatformSettings_t *settings, UniformRing_t **input_buffer_pptr)
 {
     SDL_Init(SDL_INIT_EVENTS);
-    *input_buffer_pptr = ring_create(settings->input_buffer_capacity, sizeof(int));
+    *input_buffer_pptr = ring_create(settings->input_buffer_capacity, sizeof(InputEvent_t));
 }
 
 bool gfx_is_initialized(void)
