@@ -67,7 +67,7 @@ void debug_break(void)
     while(e.key != '\n')
     {
         if (resume_for_termination && should_terminate) break;
-        e = input_read();
+        input_try_read(&e);
     }
 
     debug_is_break = false;

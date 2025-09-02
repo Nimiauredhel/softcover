@@ -79,49 +79,61 @@ void gfx_refresh_debug_window(DebugRing_t *debug_ring, bool is_break)
     */
 }
 
-InputEvent_t input_read(void)
+bool input_try_read(InputEvent_t *out)
 {
-    static SDL_Event event;
+    static SDL_Event event = {0};
+    static SDL_WindowEvent *w_event = (SDL_WindowEvent *)&event;
 
-    InputEvent_t ret = {0};
+    bool success = false;
 
-    if (SDL_PollEvent(&event))
+    if ((success = SDL_PollEvent(&event)))
     {
         switch (event.type)
         {
             case SDL_KEYUP:
-                ret.value = 0;
+                out->value = 0;
+                out->key = event.key.keysym.sym;
                 break;
-            case SDL_WINDOWEVENT_CLOSE:
+            case SDL_WINDOWEVENT:
+                switch (w_event->event)
+                {
+                    case SDL_WINDOWEVENT_CLOSE:
+                        should_terminate = true;
+                        break;
+                    case SDL_WINDOWEVENT_SIZE_CHANGED:
+                        /// TODO: handle window size change and possibly other window events
+                        break;
+                }
+                break;
             case SDL_QUIT:
             case SDL_APP_TERMINATING:
                 should_terminate = true;
                 break;
             case SDL_KEYDOWN:
-                ret.value = 1;
+                out->value = 1;
+                out->key = event.key.keysym.sym;
                 break;
             default:
                 break;
         }
     }
 
-    ret.key = event.key.keysym.sym;
-
-    return ret;
+    return success;
 }
 
 void input_push_to_buffer(PlatformSettings_t *settings, UniformRing_t *input_buffer)
 {
+    bool buffer_blocked = false;
     InputEvent_t e = {0};
 
-    for (uint8_t i = 0; i < 8; i++)
+    while ((!buffer_blocked) && input_try_read(&e))
     {
-        e = input_read();
         if (e.key == SDLK_LEFT && e.value == 1)
         {
             gfx_toggle_debug_mode();
             continue;
         }
+
         ring_push(input_buffer, &e, 1, false);
     }
 }
