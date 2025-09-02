@@ -15,10 +15,14 @@ void gfx_world_to_screen_coords(int16_t *x_ptr, int16_t *y_ptr)
 {
     Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
 
+    *x_ptr *= APP_GFX_TILE_WIDTH_PX;
+    *y_ptr *= APP_GFX_TILE_HEIGHT_PX;
+
     *x_ptr += gfx_buffer->width/2;
-    *x_ptr -= scene->entities[serializables->focal_entity_idx].transform.x_pos;
     *y_ptr += gfx_buffer->height/2;
-    *y_ptr -= scene->entities[serializables->focal_entity_idx].transform.y_pos;
+
+    *x_ptr -= scene->entities[serializables->focal_entity_idx].transform.x_pos * APP_GFX_TILE_WIDTH_PX;
+    *y_ptr -= scene->entities[serializables->focal_entity_idx].transform.y_pos * APP_GFX_TILE_HEIGHT_PX;
 }
 
 void gfx_clear_buffer(void)
@@ -134,10 +138,13 @@ void gfx_draw_thing(uint32_t thing_idx)
     size_t texture_offset = ephemerals->texture_offsets[entity_get_sprite(thing_idx)->texture_idx];
     Texture_t *texture_ptr = (Texture_t *)(ephemerals->bump_buffer+texture_offset);
 
-    int16_t x = scene->entities[thing_idx].transform.x_pos - entity_get_sprite(thing_idx)->x_offset;
-    int16_t y = scene->entities[thing_idx].transform.y_pos - entity_get_sprite(thing_idx)->y_offset;
+    int16_t x = scene->entities[thing_idx].transform.x_pos;
+    int16_t y = scene->entities[thing_idx].transform.y_pos;
 
     gfx_world_to_screen_coords(&x, &y);
+
+    x -= entity_get_sprite(thing_idx)->x_offset;
+    y -= entity_get_sprite(thing_idx)->y_offset;
 
     gfx_draw_texture(texture_ptr, x, y);
 }

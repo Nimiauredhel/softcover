@@ -6,6 +6,12 @@
 
 #include "common_structs.h"
 
+#define APP_GFX_TILE_WIDTH_PX (8)
+#define APP_GFX_TILE_HEIGHT_PX (8)
+
+#define APP_GFX_VIEWPORT_WIDTH_TILES (80)
+#define APP_GFX_VIEWPORT_HEIGHT_TILES (80)
+
 extern bool debug_gfx;
 
 void gfx_world_to_screen_coords(int16_t *x_ptr, int16_t *y_ptr);

@@ -970,8 +970,8 @@ void app_setup(Platform_t *interface)
     platform->settings->gfx_frame_time_target_us = 16666;
 
     platform->settings->gfx_pixel_size_bytes = 3;
-    platform->settings->gfx_buffer_width = 128;
-    platform->settings->gfx_buffer_height = 128;
+    platform->settings->gfx_buffer_width = APP_GFX_TILE_WIDTH_PX * APP_GFX_VIEWPORT_WIDTH_TILES;
+    platform->settings->gfx_buffer_height = APP_GFX_TILE_HEIGHT_PX * APP_GFX_VIEWPORT_HEIGHT_TILES;
 
     size_t required_gfx_memory = 
     platform->settings->gfx_pixel_size_bytes *
