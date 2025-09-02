@@ -43,8 +43,8 @@ struct UniformRing
 
 struct InputEvent
 {
-    int key;
-    int value;
+    int32_t key;
+    int32_t value;
 };
 
 UniformRing_t* ring_create(uint32_t capacity, uint8_t unit_size);

@@ -5,12 +5,14 @@
 #include <stdbool.h>
 
 #include "app_scene.h"
+#include "app_control.h"
 
 #define APP_STATE_MAX_SCENES (16)
 
 typedef struct AppSerializableState
 {
     bool initialized;
+    int32_t controller_mapping[APP_CONTROL_COUNT];
     uint16_t mov_speed;
     uint16_t controlled_entity_idx;
     uint16_t focal_entity_idx;

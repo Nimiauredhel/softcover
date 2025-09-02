@@ -14,11 +14,14 @@
 
 #include "app_entity.h"
 #include "app_scene.h"
+#include "app_control.h"
 
 typedef struct AppEphemeralState
 {
     char debug_buff[DEBUG_MESSAGE_MAX_LEN];
     uint8_t scratch[APP_SCRATCH_SIZE];
+
+    AppControllerState_t controller_state;
 
     uint16_t definitions_count;
     EntityDefinition_t definitions[APP_ENTITY_DEFS_MAX_COUNT];

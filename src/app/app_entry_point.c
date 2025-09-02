@@ -15,7 +15,7 @@
 static const Platform_t *platform = NULL;
 
 static bool input_read_from_buffer(UniformRing_t *input_buffer, InputEvent_t *out);
-static void input_process_all(void);
+static void input_read_all(void);
 
 static size_t load_texture_to_memory(char *name);
 static size_t load_wav_to_memory(char *name);
@@ -38,13 +38,95 @@ static void entities_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8
 
 static void load_ephemerals(void);
 
+static void input_process_state(AppControlIndex_t idx)
+{
+    int32_t latest = ephemerals->controller_state.latest[idx];
+    int32_t prev = ephemerals->controller_state.prev[idx];
+
+    /// 0b000000xx -> [7...2][1: is down][0: is changed]
+    /// 0 nothing, 1 key up, 2 key held, 3 key down
+    AppControlEventType_t event = (latest != prev) | ((latest > 0) << 1);
+
+    /// since event type has been determined, we don't need prev anymore so we can set it to latest
+    ephemerals->controller_state.prev[idx] = latest;
+
+    switch (event)
+    {
+        case APPCTRLEVT_NONE:
+            break;
+        case APPCTRLEVT_DOWN:
+            break;
+        case APPCTRLEVT_UP:
+            switch (idx)
+            {
+                case APPCTRLIDX_SWITCH:
+                    serializables->controlled_entity_idx = serializables->controlled_entity_idx == 0 ? 1 : 0;
+                    serializables->focal_entity_idx = serializables->focal_entity_idx == 0 ? 1 : 0;
+                    break;
+                case APPCTRLIDX_LOAD:
+                    platform->storage_load_state("test_save");
+                    break;
+                case APPCTRLIDX_SAVE:
+                    platform->storage_save_state("test_save");
+                    break;
+                case APPCTRLIDX_QUIT:
+                    platform->set_should_terminate(true);
+                    break;
+                case APPCTRLIDX_VOLUME_UP:
+                    platform->audio_set_volume(platform->audio_get_volume() + 0.1f);
+                    break;
+                case APPCTRLIDX_VOLUME_DOWN:
+                    platform->audio_set_volume(platform->audio_get_volume() - 0.1f);
+                    break;
+                    /// DEBUG KEYS
+                case APPCTRLIDX_DEBUG_GFX:
+                    debug_gfx = !debug_gfx;
+                    break;
+                case APPCTRLIDX_RELOAD_EPH:
+                    load_ephemerals();
+                    break;
+                default:
+                    break;
+            }
+            break;
+        case APPCTRLEVT_HOLD:
+            switch (idx)
+            {
+                /// TODO: take entity_move calls out of here and use some sort of command queue instead
+                case APPCTRLIDX_MOVE_UP:
+                    entity_move(serializables->controlled_entity_idx, 0, -serializables->mov_speed);
+                    break;
+                case APPCTRLIDX_MOVE_LEFT:
+                    entity_move(serializables->controlled_entity_idx, -serializables->mov_speed, 0);
+                    break;
+                case APPCTRLIDX_MOVE_DOWN:
+                    entity_move(serializables->controlled_entity_idx, 0, serializables->mov_speed);
+                    break;
+                case APPCTRLIDX_MOVE_RIGHT:
+                    entity_move(serializables->controlled_entity_idx, serializables->mov_speed, 0);
+                    break;
+                default:
+                    break;
+            }
+            break;
+    }
+}
+
+static void input_process_all(void)
+{
+    for (AppControlIndex_t k = 0; k < APP_CONTROL_COUNT; k++)
+    {
+        input_process_state(k);
+    }
+}
+
 static bool input_read_from_buffer(UniformRing_t *input_buffer, InputEvent_t *out)
 {
     if (input_buffer == NULL) return false;
     return ring_pop(input_buffer, out);
 }
 
-static void input_process_all(void)
+static void input_read_all(void)
 {
     if (platform == NULL || serializables == NULL) return;
 
@@ -52,47 +134,13 @@ static void input_process_all(void)
 
     while(input_read_from_buffer(input_buffer, &input))
     {
-        switch (input.key)
+        for (uint16_t k = 0; k < APP_CONTROL_COUNT; k++)
         {
-            case 'w':
-                entity_move(serializables->controlled_entity_idx, 0, -serializables->mov_speed);
+            if (serializables->controller_mapping[k] == input.key)
+            {
+                ephemerals->controller_state.latest[k] = input.value;
                 break;
-            case 'a':
-                entity_move(serializables->controlled_entity_idx, -serializables->mov_speed, 0);
-                break;
-            case 's':
-                entity_move(serializables->controlled_entity_idx, 0, serializables->mov_speed);
-                break;
-            case 'd':
-                entity_move(serializables->controlled_entity_idx, serializables->mov_speed, 0);
-                break;
-            case 'q':
-                serializables->controlled_entity_idx = serializables->controlled_entity_idx == 0 ? 1 : 0;
-                serializables->focal_entity_idx = serializables->focal_entity_idx == 0 ? 1 : 0;
-                break;
-            case '1':
-                platform->storage_load_state("test_save");
-                break;
-            case '!':
-                platform->storage_save_state("test_save");
-                break;
-            case '=':
-            case '+':
-                platform->audio_set_volume(platform->audio_get_volume() + 0.1f);
-                break;
-            case '-':
-            case '_':
-                platform->audio_set_volume(platform->audio_get_volume() - 0.1f);
-                break;
-                /// DEBUG KEYS
-            case '0':
-                debug_gfx = !debug_gfx;
-                break;
-            case '9':
-                load_ephemerals();
-                break;
-            default:
-                break;
+            }
         }
     }
 }
@@ -997,6 +1045,21 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
 
         explicit_bzero(serializables, sizeof(*serializables));
 
+        /// initialize default hardcoded control mapping
+        /// TODO: load control config from text file
+        serializables->controller_mapping[APPCTRLIDX_MOVE_UP] = 'w';
+        serializables->controller_mapping[APPCTRLIDX_MOVE_DOWN] = 's';
+        serializables->controller_mapping[APPCTRLIDX_MOVE_LEFT] = 'a';
+        serializables->controller_mapping[APPCTRLIDX_MOVE_RIGHT] = 'd';
+        serializables->controller_mapping[APPCTRLIDX_SWITCH] = 'q';
+        serializables->controller_mapping[APPCTRLIDX_SAVE] = '2';
+        serializables->controller_mapping[APPCTRLIDX_LOAD] = '1';
+        serializables->controller_mapping[APPCTRLIDX_QUIT] = 'x';
+        serializables->controller_mapping[APPCTRLIDX_VOLUME_UP] = '=';
+        serializables->controller_mapping[APPCTRLIDX_VOLUME_DOWN] = '-';
+        serializables->controller_mapping[APPCTRLIDX_DEBUG_GFX] = '0';
+        serializables->controller_mapping[APPCTRLIDX_RELOAD_EPH] = '9';
+
         load_scene_by_index(0);
 
         serializables->controlled_entity_idx = 0;
@@ -1013,6 +1076,7 @@ void app_init(const Platform_t *interface, AppMemoryPartition_t *memory)
 /// must match prototype @ref AppLoopFunc
 void app_loop(void)
 {
+    input_read_all();
     input_process_all();
     entities_update_draw_order();
     gfx_clear_buffer();
