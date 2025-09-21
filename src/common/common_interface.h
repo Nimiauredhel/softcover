@@ -29,7 +29,7 @@ struct PlatformCapabilities
     uint32_t gfx_buffer_height_max;
     uint8_t gfx_pixel_max_bytes;
 
-    useconds_t gfx_frame_time_min_us;
+    uint32_t gfx_frame_time_min_us;
 
     uint8_t audio_channels_max;
     uint32_t audio_buffer_capacity_max;
@@ -46,7 +46,7 @@ struct PlatformSettings
     uint32_t gfx_buffer_height;
     uint8_t gfx_pixel_size_bytes;
 
-    useconds_t gfx_frame_time_target_us;
+    uint32_t gfx_frame_time_target_us;
 
     uint8_t audio_channels;
     uint32_t audio_buffer_capacity;

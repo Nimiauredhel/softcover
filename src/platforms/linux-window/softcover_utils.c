@@ -3,6 +3,7 @@
 #include <signal.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "softcover_utils.h"
 #include "softcover_sdl2.h"
