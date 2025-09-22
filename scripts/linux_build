@@ -1,0 +1,8 @@
+cd ..
+mkdir -p build
+cd build
+mkdir -p cmake
+mkdir -p output
+cd cmake
+cmake ../.. -DSOFTCOVER_TARGET_PLATFORM:STRING=linux-window
+cmake --build .

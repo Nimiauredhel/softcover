@@ -15,10 +15,6 @@
 #include "softcover_sdl2.h"
 #include "softcover_portaudio.h"
 
-#ifndef LIB_NAME
-#define LIB_NAME ""
-#endif
-
 Memory_t* memory_allocate(size_t size);
 void memory_release(Memory_t **memory_pptr);
 void storage_save_state(char *state_name);
@@ -28,7 +24,7 @@ void set_should_terminate(bool value);
 
 static const char *state_filename_format = "%s.state";
 
-static char lib_path[128] = LIB_NAME;
+static char lib_path[128] = SOFTCOVER_APP_FILENAME;
 static char lib_mod_path[132] = "\0";
 
 static char platform_top_debug_buff[DEBUG_MESSAGE_MAX_LEN];

@@ -1,0 +1,4 @@
+cd ..
+cd build
+cd output
+./softcover_platform_linux_terminal ./softcover_app
