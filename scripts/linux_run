@@ -1,4 +1,4 @@
 cd ..
 cd build
 cd output
-./softcover_platform_linux_window ./softcover_app
+./softcover_platform_linux_window

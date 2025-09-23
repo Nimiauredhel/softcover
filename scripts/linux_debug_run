@@ -1,0 +1,4 @@
+cd ..
+cd build
+cd output
+gdb softcover_platform_linux_window

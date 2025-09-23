@@ -4,5 +4,5 @@ cd build
 mkdir -p cmake
 mkdir -p output
 cd cmake
-cmake ../.. -DSOFTCOVER_TARGET_PLATFORM:STRING=linux-terminal
+cmake ../.. -DSOFTCOVER_TARGET_PLATFORM:STRING=linux-terminal -DCMAKE_BUILD_TYPE=Release
 cmake --build .

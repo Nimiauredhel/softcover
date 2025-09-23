@@ -7,7 +7,7 @@ SET(SOFTCOVER_ASSETS_DIRECTORY ${CMAKE_SOURCE_DIR}/assets)
 SET(SOFTCOVER_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/../output)
 
 SET(SOFTCOVER_APP_FILENAME "softcover_app")
-add_compile_definitions(SOFTCOVER_APP_FILENAME="${SOFTCOVER_APP_FILENAME}")
+add_compile_definitions(SOFTCOVER_APP_FILENAME="./${SOFTCOVER_APP_FILENAME}")
 
 SET(SOFTCOVER_DEFAULT_PLATFORM "linux-window")
 SET(SOFTCOVER_TARGET_PLATFORM ${SOFTCOVER_DEFAULT_PLATFORM} CACHE STRING "Current target platform")
@@ -39,7 +39,7 @@ project(Softcover VERSION 0.001)
 #configure_file(common_config.h.in common_config.h)
 
 # TODO: use this flag
-option(SOFTCOVER_DEBUG "Enable runtime debug features" ON)
+# option(SOFTCOVER_DEBUG "Enable runtime debug features" ON)
 
 # copying assets to the output directory
 add_custom_target(copy_assets COMMAND
