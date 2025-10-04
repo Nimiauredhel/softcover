@@ -23,4 +23,7 @@ typedef struct Scene
     SoundEmitter_t sound_emitters[SCENE_ENTITY_DEFS_MAX_COUNT];
 } Scene_t;
 
+void load_scene_by_path(char *path);
+void load_scene_by_index(uint8_t index);
+
 #endif

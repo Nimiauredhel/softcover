@@ -1,10 +1,7 @@
 #ifndef APP_GFX_H
 #define APP_GFX_H
 
-#include <stdint.h>
-#include <stdbool.h>
-
-#include "common_structs.h"
+#include "app_common.h"
 
 #define APP_GFX_TILE_WIDTH_PX (8)
 #define APP_GFX_TILE_HEIGHT_PX (8)

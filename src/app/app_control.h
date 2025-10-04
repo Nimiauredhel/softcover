@@ -40,4 +40,8 @@ typedef struct AppControllerState
     int32_t prev[APP_CONTROL_COUNT];
 } AppControllerState_t;
 
+void input_process_all(void);
+bool input_read_from_buffer(UniformRing_t *input_buffer, InputEvent_t *out);
+void input_read_all(void);
+
 #endif

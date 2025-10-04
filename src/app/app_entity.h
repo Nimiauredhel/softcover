@@ -1,22 +1,20 @@
-#ifndef APP_THING_H
-#define APP_THING_H
+#ifndef APP_ENTITY_H
+#define APP_ENTITY_H
 
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
+#include "app_common.h"
 
 #define ENTITY_DEF_NAME_MAX_LEN (16)
 
-typedef enum ThingFlags
+typedef enum EntityFlags
 {
-    THING_FLAGS_NONE = 0x00,
-    THING_FLAGS_TRANSFORM = 0x01,
-    THING_FLAGS_TEXTURE = 0x02,
-    THING_FLAGS_COLLISION = 0x04,
-    THING_FLAGS_MOVEMENT = 0x08,
-    THING_FLAGS_CONTROL = 0x10,
-    THING_FLAGS_SOUND = 0x20,
-} ThingFlags_t;
+    ENTITY_FLAGS_NONE = 0x00,
+    ENTITY_FLAGS_TRANSFORM = 0x01,
+    ENTITY_FLAGS_TEXTURE = 0x02,
+    ENTITY_FLAGS_COLLISION = 0x04,
+    ENTITY_FLAGS_MOVEMENT = 0x08,
+    ENTITY_FLAGS_CONTROL = 0x10,
+    ENTITY_FLAGS_SOUND = 0x20,
+} EntityFlags_t;
 
 typedef enum CollisionFlags
 {
@@ -31,7 +29,7 @@ typedef enum CollisionFlags
 typedef struct EntityDefinition
 {
     char name[ENTITY_DEF_NAME_MAX_LEN];
-    ThingFlags_t flags;
+    EntityFlags_t flags;
 } EntityDefinition_t;
 
 typedef struct Sprite
@@ -90,6 +88,17 @@ EntityDefinition_t* entity_get_definition(uint16_t entity_idx);
 Sprite_t* entity_get_sprite(uint16_t entity_idx);
 Collider_t* entity_get_collider(uint16_t entity_idx);
 SoundEmitter_t* entity_get_sounds(uint16_t entity_idx);
+
+int32_t entity_create(int32_t scene_idx, uint16_t definition_idx, bool local_def, uint8_t layer, int32_t x, int32_t y);
+void entities_initialize_draw_order(void);
+void entities_update_draw_order(void);
+void entities_get_distance(uint16_t first_entity_id, uint16_t second_entity_id, int32_t *x_dist_out, int32_t *y_dist_out);
+uint16_t entity_test_collision(uint16_t entity_id);
+void entity_move(uint16_t entity_idx, int16_t x_delta, int16_t y_delta);
+void entity_set_pos(uint32_t entity_id, int32_t x, int32_t y);
+int8_t entities_compare_y(uint16_t first_id, uint16_t second_id);
+int8_t entities_compare_layer(uint16_t first_id, uint16_t second_id);
+void entities_sort_by_comparer(uint32_t start_idx, uint32_t end_idx, int8_t (*comparer)(uint16_t, uint16_t));
 
 #endif
 

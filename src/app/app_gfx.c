@@ -6,8 +6,6 @@
 #include "app_memory.h"
 #include "app_scene.h"
 #include "app_entity.h"
-#include "app_serializable_state.h"
-#include "app_ephemeral_state.h"
 
 bool debug_gfx = false;
 
@@ -76,7 +74,7 @@ void gfx_debug_draw_collider(uint32_t thing_idx, uint32_t draw_val)
     Scene_t *scene = &serializables->scenes[serializables->current_scene_index];
 
     if (!scene->entities[thing_idx].used) return;
-    if (!(ephemerals->definitions[scene->entities[thing_idx].definition_idx].flags & THING_FLAGS_COLLISION)) return;
+    if (!(ephemerals->definitions[scene->entities[thing_idx].definition_idx].flags & ENTITY_FLAGS_COLLISION)) return;
 
     Transform_t *transform = &scene->entities[thing_idx].transform;
     Collider_t *collider = &ephemerals->colliders[scene->entities[thing_idx].definition_idx];
